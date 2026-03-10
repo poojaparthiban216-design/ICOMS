@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kadambaas - Manage Orders</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FFF9F6; }
+        .orange-header { background: linear-gradient(90deg, #E31E24 0%, #FF5F1F 100%); }
+        .modal-bg { background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+        .card-shadow { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.06); }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        .row-enter { animation: fadeIn 0.25s ease; }
+    </style>
+</head>
+<body class="min-h-screen pb-10">
+
+    <header class="orange-header px-8 py-4 flex justify-between items-center text-white shadow-md">
+        <div class="flex items-center gap-3">
+            <a href="admin.html" class="bg-white/20 p-2 rounded-lg hover:bg-white/30 transition">←</a>
+            <div class="bg-white/20 p-2 rounded-lg">📦</div>
+            <h1 class="font-bold text-xl tracking-tighter">KADAMBAAS</h1>
+        </div>
+        <span class="text-sm bg-white/20 px-3 py-1 rounded-full">Order Management</span>
+    </header>
+
+    <main class="max-w-5xl mx-auto p-6 space-y-6">
+
+        <!-- Stats Row -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-2xl card-shadow border border-gray-100 flex items-center gap-4">
+                <div class="bg-orange-100 p-3 rounded-xl text-orange-600 text-xl">📦</div>
+                <div><p class="text-xs text-gray-400 font-semibold">Total</p><p id="count-total" class="text-2xl font-black text-gray-800">0</p></div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl card-shadow border border-gray-100 flex items-center gap-4">
+                <div class="bg-yellow-100 p-3 rounded-xl text-yellow-600 text-xl">⏳</div>
+                <div><p class="text-xs text-gray-400 font-semibold">Pending</p><p id="count-pending" class="text-2xl font-black text-yellow-600">0</p></div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl card-shadow border border-gray-100 flex items-center gap-4">
+                <div class="bg-blue-100 p-3 rounded-xl text-blue-600 text-xl">🚚</div>
+                <div><p class="text-xs text-gray-400 font-semibold">In Transit</p><p id="count-transit" class="text-2xl font-black text-blue-600">0</p></div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl card-shadow border border-gray-100 flex items-center gap-4">
+                <div class="bg-green-100 p-3 rounded-xl text-green-600 text-xl">✅</div>
+                <div><p class="text-xs text-gray-400 font-semibold">Delivered</p><p id="count-done" class="text-2xl font-black text-green-600">0</p></div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex flex-col md:flex-row gap-4">
+            <div class="relative flex-1">
+                <input type="text" id="orderSearch" oninput="filterRender()"
+                       placeholder="Search by order code or customer name..."
+                       class="w-full p-4 pl-12 rounded-2xl bg-white card-shadow outline-none focus:ring-2 focus:ring-orange-400 border border-gray-100">
+                <span class="absolute left-4 top-4 text-gray-400 text-lg">🔍</span>
+            </div>
+            <button onclick="openOrderModal()"
+                    class="bg-gradient-to-r from-[#E31E24] to-[#FF5F1F] text-white px-8 py-4 rounded-2xl font-bold shadow-lg hover:opacity-90 transition whitespace-nowrap">
+                + New Order
+            </button>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-3xl card-shadow border border-gray-100 overflow-hidden">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-gray-50 text-gray-400 text-[10px] uppercase font-bold tracking-widest border-b border-gray-100">
+                    <tr>
+                        <th class="px-6 py-4">Order Code</th>
+                        <th class="px-6 py-4">Customer</th>
+                        <th class="px-6 py-4">Event Time</th>
+                        <th class="px-6 py-4">Status</th>
+                        <th class="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="orderList">
+                    <tr><td colspan="5" class="px-6 py-10 text-center text-gray-300">
+                        <div class="animate-pulse">Loading orders from database…</div>
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Create Order Modal -->
+    <div id="orderModal" class="fixed inset-0 modal-bg hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="bg-orange-100 p-3 rounded-2xl text-orange-600 text-xl">📦</div>
+                <h3 class="text-2xl font-bold text-gray-800">Create New Order</h3>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-1">Order Code</label>
+                    <input type="text" id="orderID" placeholder="e.g. #8830"
+                           class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-400">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-1">Customer Name <span class="text-gray-400 font-normal">(optional)</span></label>
+                    <input type="text" id="customerName" placeholder="e.g. Tech Corp Ltd"
+                           class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-400">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-1">Event Time <span class="text-gray-400 font-normal">(optional)</span></label>
+                    <input type="datetime-local" id="eventTime"
+                           class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-400">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-1">Status</label>
+                    <select id="orderStatus" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-400">
+                        <option value="Pending">Pending</option>
+                        <option value="Preparing">Preparing</option>
+                        <option value="Ready">Ready</option>
+                        <option value="Dispatched">Dispatched</option>
+                        <option value="In Transit">In Transit</option>
+                        <option value="Delivered">Delivered</option>
+                    </select>
+                </div>
+                <p id="modal-error" class="text-red-500 text-sm font-medium hidden"></p>
+                <div class="flex gap-3 pt-2">
+                    <button onclick="saveOrder()" id="save-btn"
+                            class="flex-1 bg-gradient-to-r from-[#E31E24] to-[#FF5F1F] text-white py-3 rounded-xl font-bold hover:opacity-90 transition">
+                        Save Order
+                    </button>
+                    <button onclick="closeOrderModal()"
+                            class="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── State ──────────────────────────────────────────────────
+        // BUG FIX: Orders are now stored in MySQL, NOT localStorage.
+        // All read/write operations go through the API.
+        let allOrders = [];
+
+        // ── Modal ──────────────────────────────────────────────────
+        function openOrderModal() {
+            document.getElementById('orderModal').classList.remove('hidden');
+            document.getElementById('orderModal').classList.add('flex');
+            document.getElementById('modal-error').classList.add('hidden');
+        }
+        function closeOrderModal() {
+            document.getElementById('orderModal').classList.add('hidden');
+            document.getElementById('orderModal').classList.remove('flex');
+            document.getElementById('orderID').value = '';
+            document.getElementById('customerName').value = '';
+            document.getElementById('eventTime').value = '';
+            document.getElementById('orderStatus').value = 'Pending';
+        }
+
+        // ── CREATE order — now POSTs to MySQL via API ──────────────
+        async function saveOrder() {
+            const order_code    = document.getElementById('orderID').value.trim();
+            const customer_name = document.getElementById('customerName').value.trim();
+            const event_time    = document.getElementById('eventTime').value;
+            const order_status  = document.getElementById('orderStatus').value;
+            const errEl         = document.getElementById('modal-error');
+
+            if (!order_code) {
+                errEl.textContent = 'Order Code is required.';
+                errEl.classList.remove('hidden');
+                return;
+            }
+
+            const btn = document.getElementById('save-btn');
+            btn.disabled = true;
+            btn.textContent = 'Saving…';
+
+            try {
+                const res  = await fetch('http://localhost:3000/api/orders', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ order_code, customer_name, order_status, event_time: event_time || null })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    errEl.textContent = data.error || 'Failed to save order.';
+                    errEl.classList.remove('hidden');
+                } else {
+                    closeOrderModal();
+                    loadOrders(); // Refresh from DB
+                }
+            } catch (err) {
+                errEl.textContent = 'Cannot connect to server. Is it running?';
+                errEl.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Save Order';
+            }
+        }
+
+        // ── DELETE order — sends DELETE to API ────────────────────
+        async function deleteOrder(orderId) {
+            if (!confirm('Are you sure you want to delete this order?')) return;
+            try {
+                await fetch(`http://localhost:3000/api/orders/${orderId}`, { method: 'DELETE' });
+                loadOrders();
+            } catch (err) {
+                alert('Failed to delete: ' + err.message);
+            }
+        }
+
+        // ── LOAD orders from MySQL ─────────────────────────────────
+        async function loadOrders() {
+            try {
+                const res  = await fetch('http://localhost:3000/api/orders');
+                allOrders  = await res.json();
+                filterRender();
+            } catch (err) {
+                document.getElementById('orderList').innerHTML = `
+                    <tr><td colspan="5" class="px-6 py-10 text-center text-red-400 font-medium">
+                        ⚠ Cannot reach server. Make sure <code>node server.js</code> is running.
+                    </td></tr>`;
+            }
+        }
+
+        // ── RENDER with optional search filter ────────────────────
+        function filterRender() {
+            const query    = document.getElementById('orderSearch').value.toLowerCase();
+            const filtered = allOrders.filter(o =>
+                (o.order_code    || '').toLowerCase().includes(query) ||
+                (o.customer_name || '').toLowerCase().includes(query)
+            );
+
+            // Update counters
+            document.getElementById('count-total').innerText   = allOrders.length;
+            document.getElementById('count-pending').innerText = allOrders.filter(o => o.order_status === 'Pending').length;
+            document.getElementById('count-transit').innerText = allOrders.filter(o => o.order_status === 'In Transit').length;
+            document.getElementById('count-done').innerText    = allOrders.filter(o => o.order_status === 'Delivered').length;
+
+            const list = document.getElementById('orderList');
+            if (filtered.length === 0) {
+                list.innerHTML = `<tr><td colspan="5" class="px-6 py-10 text-center text-gray-400 italic">No orders found.</td></tr>`;
+                return;
+            }
+
+            list.innerHTML = filtered.map(o => `
+                <tr class="row-enter border-b border-gray-50 hover:bg-orange-50/40 transition">
+                    <td class="px-6 py-4 font-bold text-gray-800">${o.order_code}</td>
+                    <td class="px-6 py-4 text-gray-600">${o.customer_name || '<span class="text-gray-300 italic">—</span>'}</td>
+                    <td class="px-6 py-4 text-gray-500 text-sm">
+                        ${o.event_time ? new Date(o.event_time).toLocaleString('en-IN', {dateStyle:'medium', timeStyle:'short'}) : '<span class="text-gray-300">—</span>'}
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${statusClass(o.order_status)}">
+                            ${o.order_status}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="deleteOrder(${o.order_id})"
+                                class="text-red-400 hover:text-red-600 font-semibold text-sm transition">
+                            🗑 Remove
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function statusClass(s) {
+            if (s === 'Pending')    return 'bg-yellow-100 text-yellow-700';
+            if (s === 'Preparing')  return 'bg-blue-100 text-blue-700';
+            if (s === 'Ready')      return 'bg-purple-100 text-purple-700';
+            if (s === 'Dispatched') return 'bg-orange-100 text-orange-700';
+            if (s === 'In Transit') return 'bg-cyan-100 text-cyan-700';
+            if (s === 'Delivered')  return 'bg-green-100 text-green-700';
+            return 'bg-gray-100 text-gray-600';
+        }
+
+        // Close modal on outside click
+        document.getElementById('orderModal').addEventListener('click', function(e) {
+            if (e.target === this) closeOrderModal();
+        });
+
+        // ── Auth guard & init ──────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+            const role = localStorage.getItem('role');
+            if (role !== 'Admin' && role !== 'Dispatcher' && role !== 'Supervisor') {
+                alert('Access denied.');
+                window.location.href = 'login.html';
+                return;
+            }
+            loadOrders();
+        });
+    </script>
+</body>
+</html>
