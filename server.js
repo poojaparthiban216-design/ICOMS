@@ -1,94 +1,10 @@
 const express = require('express');
-<<<<<<< HEAD
-const mysql = require('mysql2');
-const cors = require('cors');
-require('dotenv').config();
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// Database Connection Pool
-const db = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    waitForConnections: true,
-    connectionLimit: 10
-});
-
-// Test Connection
-db.getConnection((err, connection) => {
-    if (err) {
-        console.error('❌ Database connection failed:', err.message);
-    } else {
-        console.log('✅ Connected to Kadambaas Database');
-        connection.release();
-    }
-});
-
-// --- LOGIN ENDPOINT ---
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    
-    const sql = `
-        SELECT u.user_id, u.name, u.password_hash, r.role_name 
-        FROM users u
-        JOIN user_roles ur ON u.user_id = ur.user_id
-        JOIN roles r ON ur.role_id = r.role_id
-        WHERE u.name = ? OR u.email = ?
-    `;
-
-    db.query(sql, [username, username], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (results.length === 0) return res.status(401).json({ message: "User not found" });
-
-        const user = results[0];
-
-        // Direct password check (use bcrypt later for security)
-        if (password === user.password_hash) { 
-            res.json({ 
-                success: true, 
-                role: user.role_name, 
-                user_id: user.user_id,
-                name: user.name
-            });
-        } else {
-            res.status(401).json({ message: "Invalid credentials" });
-        }
-    });
-});
-
-// --- ADMIN STATS ENDPOINT ---
-app.get('/api/admin/stats', (req, res) => {
-    const sql = `SELECT 
-        (SELECT COUNT(*) FROM orders) as totalOrders,
-        (SELECT COUNT(*) FROM users) as totalUsers`;
-    db.query(sql, (err, results) => {
-        if (err) return res.status(500).json(err);
-        res.json(results[0]);
-    });
-});
-
-// --- ADMIN DASHBOARD STATS ---
-app.get('/api/admin/dashboard-stats', (req, res) => {
-    const sql = `
-        SELECT 
-            (SELECT COUNT(*) FROM orders) as totalOrders,
-            (SELECT COUNT(*) FROM users) as totalUsers
-    `;
-    
-    db.query(sql, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-=======
 const mysql   = require('mysql2');
 const cors    = require('cors');
 require('dotenv').config();
 
 const app = express();
 
-// ── CORS — restrict to your frontend origin in production ─────────
 app.use(cors({
     origin: process.env.FRONTEND_ORIGIN || '*',
     methods: ['GET','POST','PUT','PATCH','DELETE'],
@@ -96,14 +12,15 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// ── Database Connection Pool ──────────────────────────────────────
 const db = mysql.createPool({
     host:               process.env.DB_HOST,
     user:               process.env.DB_USER,
     password:           process.env.DB_PASSWORD,
     database:           process.env.DB_NAME,
+    port:               process.env.DB_PORT,
     waitForConnections: true,
-    connectionLimit:    10
+    connectionLimit:    10,
+    ssl:                { rejectUnauthorized: false }
 });
 
 db.getConnection((err, connection) => {
@@ -111,16 +28,11 @@ db.getConnection((err, connection) => {
     else      { console.log('✅ Connected to Kadambaas Database'); connection.release(); }
 });
 
-// =================================================================
-//  PUBLIC ROUTES
-// =================================================================
-
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
         return res.status(400).json({ message: 'Username and password are required.' });
     }
-
     const sql = `
         SELECT u.user_id, u.name, u.email, u.password_hash, u.status, r.role_name
         FROM users u
@@ -129,24 +41,16 @@ app.post('/api/login', async (req, res) => {
         WHERE u.name = ? OR u.email = ?
         LIMIT 1
     `;
-    db.query(sql, [username, username], async (err, results) => {
+    db.query(sql, [username, username], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
-        // Vague message — do not reveal whether the username exists
         if (results.length === 0) return res.status(401).json({ message: 'Invalid credentials.' });
-
         const user = results[0];
-        if (user.status === 'Inactive') {
-            return res.status(403).json({ message: 'This account has been deactivated.' });
-        }
-
-        const passwordMatch = (password === user.password_hash);
-        if (!passwordMatch) return res.status(401).json({ message: 'Invalid credentials.' });
-
+        if (user.status === 'Inactive') return res.status(403).json({ message: 'This account has been deactivated.' });
+        if (password !== user.password_hash) return res.status(401).json({ message: 'Invalid credentials.' });
         res.json({ success: true, role: user.role_name, user_id: user.user_id, name: user.name });
     });
 });
 
-// Client order lookup (public — used for shareable tracking links)
 app.get('/api/client/order/:order_code', (req, res) => {
     const sql = `
         SELECT o.order_id, o.order_code, o.order_status, o.event_time,
@@ -163,54 +67,11 @@ app.get('/api/client/order/:order_code', (req, res) => {
     db.query(sql, [req.params.order_code], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         if (results.length === 0) return res.status(404).json({ message: 'Order not found' });
->>>>>>> 3759db80d9a693123a2bb4d4189b35c4968481f7
         res.json(results[0]);
     });
 });
 
-<<<<<<< HEAD
-// Get all users with their roles
-app.get('/api/users', (req, res) => {
-    const sql = `
-        SELECT u.user_id, u.name, u.email, r.role_name 
-        FROM users u
-        LEFT JOIN user_roles ur ON u.user_id = ur.user_id
-        LEFT JOIN roles r ON ur.role_id = r.role_id
-    `;
-    db.query(sql, (err, results) => {
-        if (err) return res.status(500).json(err);
-        res.json(results);
-    });
-}); 
-
-// 1. Endpoint for Drivers to update their location (Every 1 minute)
-app.post('/api/driver/update-location', (req, res) => {
-    const { order_id, lat, lng } = req.body;
-    const sql = "UPDATE orders SET lat = ?, lng = ? WHERE order_id = ?";
-    
-    db.query(sql, [lat, lng, order_id], (err, result) => {
-        if (err) return res.status(500).json({ success: false, error: err.message });
-        res.json({ success: true, message: "Location updated" });
-    });
-});
-
-// 2. Endpoint for Clients to fetch location via Tracking Token
-app.get('/api/track/:token', (req, res) => {
-    const token = req.params.token;
-    const sql = "SELECT order_code, client_name, order_status, lat, lng FROM orders WHERE tracking_token = ?";
-    
-    db.query(sql, [token], (err, results) => {
-        if (err || results.length === 0) return res.status(404).json({ success: false, message: "Invalid tracking link" });
-        res.json({ success: true, data: results[0] });
-    });
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
-=======
-app.post('/api/client/login-track', async (req, res) => {
+app.post('/api/client/login-track', (req, res) => {
     const { username, password } = req.body;
     const sql = `
         SELECT u.user_id, u.name, u.password_hash, r.role_name
@@ -219,13 +80,11 @@ app.post('/api/client/login-track', async (req, res) => {
         JOIN roles r       ON ur.role_id = r.role_id
         WHERE (u.name = ? OR u.email = ?) AND r.role_name = 'Client'
     `;
-    db.query(sql, [username, username], async (err, results) => {
+    db.query(sql, [username, username], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         if (results.length === 0) return res.status(401).json({ message: 'Client account not found' });
-        const user  = results[0];
-        const match = (password === user.password_hash);
-        if (!match) return res.status(401).json({ message: 'Invalid credentials' });
-
+        const user = results[0];
+        if (password !== user.password_hash) return res.status(401).json({ message: 'Invalid credentials' });
         const orderSql = `
             SELECT o.order_id, o.order_code, o.order_status, o.event_time,
                    d.delivery_id, u2.name AS driver_name, cl.delivery_address
@@ -243,11 +102,6 @@ app.post('/api/client/login-track', async (req, res) => {
     });
 });
 
-// =================================================================
-//  PROTECTED ROUTES
-// =================================================================
-
-// Admin
 app.get('/api/admin/stats', (req, res) => {
     db.query(
         'SELECT (SELECT COUNT(*) FROM orders) AS totalOrders, (SELECT COUNT(*) FROM users) AS totalUsers',
@@ -271,7 +125,6 @@ app.get('/api/admin/live-drivers', (req, res) => {
     db.query(sql, (err, r) => { if (err) return res.status(500).json({ error: err.message }); res.json(r); });
 });
 
-// Users
 app.get('/api/users', (req, res) => {
     db.query(
         `SELECT u.user_id, u.name, u.email, u.status, r.role_name
@@ -308,7 +161,6 @@ app.delete('/api/users/:id', (req, res) => {
     });
 });
 
-// Orders
 app.get('/api/orders', (req, res) => {
     db.query(
         `SELECT o.order_id, o.order_code, o.order_status, o.event_time, o.created_at, u.name AS customer_name
@@ -318,7 +170,7 @@ app.get('/api/orders', (req, res) => {
 });
 
 app.post('/api/orders', (req, res) => {
-    const { order_code, customer_name, order_status, client_id, event_time } = req.body;
+    const { order_code, order_status, client_id, event_time } = req.body;
     if (!order_code) return res.status(400).json({ error: 'order_code is required' });
     db.query(
         'INSERT INTO orders (order_code, client_id, order_status, event_time) VALUES (?, ?, ?, ?)',
@@ -345,7 +197,6 @@ app.delete('/api/orders/:id', (req, res) => {
     });
 });
 
-// Dispatch
 app.get('/api/dispatch/available-drivers', (req, res) => {
     db.query(
         "SELECT u.user_id, u.name, u.phone, d.current_status FROM users u JOIN drivers d ON u.user_id=d.driver_id WHERE d.current_status='Available'",
@@ -386,7 +237,6 @@ app.post('/api/dispatch/vessels/update', (req, res) => {
     });
 });
 
-// Driver — self-only guard
 app.get('/api/driver/:driver_id/active-delivery', (req, res) => {
     const id = parseInt(req.params.driver_id);
     const sql = `
@@ -431,7 +281,6 @@ app.put('/api/driver/complete-delivery', (req, res) => {
     });
 });
 
-// Tracking
 app.put('/api/tracking/update', (req, res) => {
     const { delivery_id, latitude, longitude } = req.body;
     db.query('INSERT INTO tracking_logs (delivery_id, latitude, longitude) VALUES (?, ?, ?)',
@@ -464,20 +313,16 @@ app.get('/api/tracking/history/:delivery_id', (req, res) => {
     );
 });
 
-// Notifications — returns all notifications (optionally filtered by user_id)
 app.get('/api/notifications', (req, res) => {
     const userId = req.query.user_id;
     const sql = userId
-        ? `SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC`
-        : `SELECT * FROM notifications ORDER BY created_at DESC`;
-    const params = userId ? [userId] : [];
-    db.query(sql, params, (err, r) => {
+        ? 'SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC'
+        : 'SELECT * FROM notifications ORDER BY created_at DESC';
+    db.query(sql, userId ? [userId] : [], (err, r) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(r);
     });
 });
 
-// =================================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
->>>>>>> 3759db80d9a693123a2bb4d4189b35c4968481f7
