@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kadambaas — Track Your Order</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FFF9F6; }
+        .orange-header { background: linear-gradient(90deg, #E31E24 0%, #FF5F1F 100%); }
+        .card-shadow { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+
+        #map { height: 320px; border-radius: 1.5rem; z-index: 0; }
+        .leaflet-popup-content-wrapper {
+            border-radius: 1rem !important;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        .tab-btn { transition: all 0.2s; }
+        .tab-btn.active { background: #ea580c; color: white; }
+
+        .status-Pending    { background:#fef3c7; color:#92400e; }
+        .status-Preparing  { background:#dbeafe; color:#1e40af; }
+        .status-Ready      { background:#dcfce7; color:#166534; }
+        .status-Dispatched { background:#ffedd5; color:#9a3412; }
+        .status-In-Transit { background:#fef9c3; color:#713f12; }
+        .status-Delivered  { background:#d1fae5; color:#065f46; }
+        .status-Cancelled  { background:#fee2e2; color:#991b1b; }
+
+        @keyframes etaPop {
+            from { transform:scale(0.85); opacity:0; }
+            to   { transform:scale(1);    opacity:1; }
+        }
+        .eta-pop { animation: etaPop 0.35s ease; }
+
+        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+        .live-blink { animation: blink 1.4s ease-in-out infinite; }
+
+        @keyframes slideDown {
+            from { transform:translateY(-16px); opacity:0; }
+            to   { transform:translateY(0);     opacity:1; }
+        }
+        .nearby-alert { animation: slideDown 0.4s ease; }
+    </style>
+</head>
+<body class="min-h-screen pb-10">
+
+    <header class="orange-header px-6 py-4 text-white shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-white/20 p-2 rounded-xl text-xl">📍</div>
+            <div>
+                <h1 class="font-bold text-lg tracking-tighter leading-none">KADAMBAAS</h1>
+                <p class="text-xs text-white/70 font-medium">Premium Catering · Live Order Tracking</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-lg mx-auto px-4 pt-5 space-y-4">
+
+        <!-- Lookup panel -->
+        <div id="lookup-panel" class="bg-white rounded-3xl p-6 card-shadow border border-gray-100 space-y-4">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Find Your Order</p>
+
+            <div class="flex bg-gray-100 rounded-2xl p-1 gap-1">
+                <button onclick="switchTab('code')" id="tab-code"
+                        class="tab-btn active flex-1 py-2 rounded-xl text-sm font-bold">Order Code</button>
+                <button onclick="switchTab('login')" id="tab-login"
+                        class="tab-btn flex-1 py-2 rounded-xl text-sm font-bold text-gray-500">Client Login</button>
+            </div>
+
+            <div id="form-code" class="space-y-3">
+                <input id="order-code-input" type="text" placeholder="Enter order code e.g. #8829"
+                       class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 font-semibold text-gray-700">
+                <button onclick="lookupByCode()"
+                        class="w-full bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-bold py-3 rounded-xl transition-all">
+                    Track Order →
+                </button>
+            </div>
+
+            <div id="form-login" class="space-y-3 hidden">
+                <input id="login-username" type="text" placeholder="Username or email"
+                       class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500">
+                <input id="login-password" type="password" placeholder="Password"
+                       class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500">
+                <button onclick="loginAndTrack()"
+                        class="w-full bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-bold py-3 rounded-xl transition-all">
+                    Sign In & Track →
+                </button>
+            </div>
+
+            <p id="lookup-error" class="text-red-500 text-sm font-medium text-center hidden"></p>
+        </div>
+
+        <!-- Tracking panel -->
+        <div id="tracking-panel" class="hidden space-y-4">
+
+            <!-- Nearby alert (shows when < 5 min away) -->
+            <div id="nearby-alert"
+                 class="nearby-alert hidden bg-green-500 text-white rounded-3xl p-4 flex items-center gap-3 shadow-lg">
+                <span class="text-3xl">🎉</span>
+                <div>
+                    <p class="font-bold text-base leading-none">Driver is almost there!</p>
+                    <p class="text-green-100 text-xs mt-1">Estimated arrival in under 5 minutes</p>
+                </div>
+            </div>
+
+            <!-- Order status -->
+            <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Order</p>
+                        <p id="t-order-code" class="font-black text-gray-800 text-2xl mt-0.5">#—</p>
+                        <p id="t-client-name" class="text-xs text-gray-400 mt-0.5"></p>
+                    </div>
+                    <div class="text-right space-y-2">
+                        <span id="t-status-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Loading…</span>
+                        <div id="live-indicator" class="hidden flex items-center justify-end gap-1.5">
+                            <span class="live-blink w-2 h-2 rounded-full bg-green-500 inline-block"></span>
+                            <span class="text-xs font-bold text-green-600">LIVE</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ETA countdown -->
+            <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100 text-center">
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Estimated Arrival</p>
+                <div class="flex items-end justify-center gap-1 mt-1">
+                    <span id="eta-mins"  class="text-6xl font-black text-orange-600">—</span>
+                    <span id="eta-colon" class="text-3xl font-black text-orange-300 mb-2 hidden">:</span>
+                    <span id="eta-secs"  class="text-4xl font-black text-orange-400 mb-1 hidden">00</span>
+                    <span id="eta-unit"  class="text-xl font-bold text-gray-400 mb-2">min</span>
+                </div>
+                <p id="eta-sub" class="text-xs text-gray-400 mt-2">Awaiting driver location…</p>
+                <div class="mt-3 bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div id="eta-bar" class="h-2 bg-orange-500 rounded-full transition-all duration-1000" style="width:0%"></div>
+                </div>
+                <p class="text-[10px] text-gray-300 mt-1">Map & ETA updates every 60 seconds</p>
+            </div>
+
+            <!-- Driver info -->
+            <div id="driver-info-card" class="hidden bg-white rounded-3xl p-5 card-shadow border border-gray-100">
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Your Driver</p>
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 font-black text-xl flex items-center justify-center" id="driver-avatar">?</div>
+                    <div>
+                        <p id="driver-full-name" class="font-bold text-gray-800 text-lg">—</p>
+                        <p class="text-xs text-gray-400">Kadambaas delivery driver</p>
+                    </div>
+                    <span class="ml-auto px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">On the way</span>
+                </div>
+            </div>
+
+            <!-- Map -->
+            <div class="bg-white rounded-3xl p-3 card-shadow border border-gray-100 overflow-hidden">
+                <div id="map"></div>
+                <div class="flex items-center justify-between px-2 py-2">
+                    <p class="text-xs text-gray-400">🛣️ Orange line = driver's travel path</p>
+                    <p class="text-xs text-gray-400">Updates every 60s</p>
+                </div>
+            </div>
+
+            <!-- Progress steps -->
+            <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100">
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Delivery Progress</p>
+                <ol class="relative border-l-2 border-orange-200 ml-2 space-y-4 pb-1">
+                    <li class="ml-5" id="prog-confirmed">
+                        <span class="prog-dot absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-gray-200"></span>
+                        <p class="prog-label text-sm text-gray-400 font-semibold">Order Confirmed</p>
+                        <p class="text-xs text-gray-400">Catering team has your order</p>
+                    </li>
+                    <li class="ml-5" id="prog-dispatched">
+                        <span class="prog-dot absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-gray-200"></span>
+                        <p class="prog-label text-sm text-gray-400 font-semibold">Driver Dispatched</p>
+                        <p class="text-xs text-gray-400">Driver assigned to your order</p>
+                    </li>
+                    <li class="ml-5" id="prog-transit">
+                        <span class="prog-dot absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-gray-200"></span>
+                        <p class="prog-label text-sm text-gray-400 font-semibold">In Transit</p>
+                        <p class="text-xs text-gray-400">On the way to your venue</p>
+                    </li>
+                    <li class="ml-5" id="prog-delivered">
+                        <span class="prog-dot absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-gray-200"></span>
+                        <p class="prog-label text-sm text-gray-400 font-semibold">Delivered</p>
+                        <p class="text-xs text-gray-400">Enjoy your catering!</p>
+                    </li>
+                </ol>
+            </div>
+
+            <button onclick="resetTracking()"
+                    class="w-full py-3 text-sm text-gray-400 hover:text-orange-600 font-semibold transition-colors">
+                ← Track a different order
+            </button>
+
+        </div>
+    </main>
+
+    <script>
+    // ── State ──────────────────────────────────────────────────────
+    let map              = null;
+    let driverMarker     = null;
+    let pathPolyline     = null;
+    let pollHandle       = null;
+    let countdownHandle  = null;
+    let currentDeliveryId = null;
+    let etaEndTime       = null;
+    let etaTotalSecs     = null;
+    let nearbyAlerted    = false;
+
+    const driverIcon = L.divIcon({
+        html: `<div style="background:linear-gradient(135deg,#E31E24,#FF5F1F);width:42px;height:42px;border-radius:50%;border:3px solid white;box-shadow:0 4px 14px rgba(227,30,36,0.4);display:flex;align-items:center;justify-content:center;font-size:20px;">🚗</div>`,
+        iconSize:[42,42], iconAnchor:[21,21], className:''
+    });
+
+    // ── Tab ────────────────────────────────────────────────────────
+    function switchTab(tab) {
+        document.getElementById('form-code').classList.toggle('hidden',  tab !== 'code');
+        document.getElementById('form-login').classList.toggle('hidden', tab !== 'login');
+        document.getElementById('tab-code').classList.toggle('active',   tab === 'code');
+        document.getElementById('tab-login').classList.toggle('active',  tab === 'login');
+        document.getElementById('tab-code').classList.toggle('text-gray-500',  tab !== 'code');
+        document.getElementById('tab-login').classList.toggle('text-gray-500', tab !== 'login');
+        document.getElementById('lookup-error').classList.add('hidden');
+    }
+
+    // ── Order code lookup ──────────────────────────────────────────
+    async function lookupByCode() {
+        const raw  = document.getElementById('order-code-input').value.trim();
+        const code = raw.startsWith('#') ? raw : '#' + raw;
+        if (!raw) return showError('Please enter your order code.');
+        try {
+            const res = await fetch(`http://localhost:3000/api/client/order/${encodeURIComponent(code)}`);
+            if (res.status === 404) return showError('Order not found. Please check your code.');
+            startTracking(await res.json());
+        } catch { showError('Could not connect to server.'); }
+    }
+
+    // ── Client login ───────────────────────────────────────────────
+    async function loginAndTrack() {
+        const username = document.getElementById('login-username').value.trim();
+        const password = document.getElementById('login-password').value;
+        if (!username || !password) return showError('Please enter your credentials.');
+        try {
+            const res  = await fetch('http://localhost:3000/api/client/login-track', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (!res.ok) return showError(data.message || 'Login failed.');
+            startTracking(data.order, data.client_name);
+        } catch { showError('Could not connect to server.'); }
+    }
+
+    // ── Start tracking ─────────────────────────────────────────────
+    function startTracking(order, clientName) {
+        document.getElementById('lookup-panel').classList.add('hidden');
+        document.getElementById('tracking-panel').classList.remove('hidden');
+        document.getElementById('t-order-code').textContent  = order.order_code;
+        document.getElementById('t-client-name').textContent = clientName || '';
+
+        const sk = (order.order_status||'').replace(/\s+/g,'-');
+        document.getElementById('t-status-badge').textContent = order.order_status;
+        document.getElementById('t-status-badge').className   = `px-3 py-1 rounded-full text-xs font-bold status-${sk}`;
+        updateProgressSteps(order.order_status);
+        if (order.driver_name) showDriverInfo(order.driver_name);
+
+        if (order.delivery_id) {
+            currentDeliveryId = order.delivery_id;
+            pollTracking();
+            pollHandle = setInterval(pollTracking, 60000);
+        } else {
+            document.getElementById('eta-sub').textContent = 'Driver not yet assigned. Check back soon.';
+        }
+    }
+
+    // ── Poll every 60s ─────────────────────────────────────────────
+    async function pollTracking() {
+        if (!currentDeliveryId) return;
+        try {
+            const [latestRes, historyRes] = await Promise.all([
+                fetch(`http://localhost:3000/api/tracking/latest/${currentDeliveryId}`),
+                fetch(`http://localhost:3000/api/tracking/history/${currentDeliveryId}`)
+            ]);
+            if (!latestRes.ok) { document.getElementById('eta-sub').textContent = 'Waiting for driver to start…'; return; }
+
+            const latest  = await latestRes.json();
+            const history = historyRes.ok ? await historyRes.json() : [];
+
+            document.getElementById('live-indicator').classList.remove('hidden');
+            updateMap(latest, history);
+            updateETA(latest);
+            if (latest.driver_name) showDriverInfo(latest.driver_name);
+
+            const sk = (latest.order_status||'').replace(/\s+/g,'-');
+            document.getElementById('t-status-badge').textContent = latest.order_status;
+            document.getElementById('t-status-badge').className   = `px-3 py-1 rounded-full text-xs font-bold status-${sk}`;
+            updateProgressSteps(latest.order_status);
+
+            if (latest.order_status === 'Delivered') {
+                clearInterval(pollHandle); clearInterval(countdownHandle);
+                document.getElementById('live-indicator').classList.add('hidden');
+                document.getElementById('eta-mins').textContent = '✔';
+                document.getElementById('eta-colon').classList.add('hidden');
+                document.getElementById('eta-secs').classList.add('hidden');
+                document.getElementById('eta-unit').classList.add('hidden');
+                document.getElementById('eta-sub').textContent  = 'Your order has been delivered!';
+                document.getElementById('eta-bar').style.width  = '100%';
+                document.getElementById('eta-bar').style.background = '#22c55e';
+            }
+        } catch(err) { console.warn('Poll error:', err.message); }
+    }
+
+    // ── Map + path line ────────────────────────────────────────────
+    function initMap(lat, lng) {
+        if (map) return;
+        map = L.map('map').setView([lat, lng], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution:'© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom:19
+        }).addTo(map);
+    }
+
+    function updateMap(latest, history) {
+        const lat = parseFloat(latest.latitude);
+        const lng = parseFloat(latest.longitude);
+        if (isNaN(lat) || isNaN(lng)) return;
+        if (!map) initMap(lat, lng);
+
+        // Smooth animated marker move
+        if (driverMarker) {
+            animateMarker(driverMarker, [lat, lng]);
+            driverMarker.setPopupContent(`<b>Your driver</b><br>Updated: ${new Date(latest.recorded_at).toLocaleTimeString()}`);
+        } else {
+            driverMarker = L.marker([lat, lng], { icon: driverIcon })
+                .addTo(map)
+                .bindPopup(`<b>Your driver</b><br>Updated: ${new Date(latest.recorded_at).toLocaleTimeString()}`);
+        }
+        map.panTo([lat, lng], { animate:true, duration:1.2 });
+
+        // Draw/update the travel path line
+        if (history.length >= 2) {
+            const coords = history.map(p => [parseFloat(p.latitude), parseFloat(p.longitude)]);
+            if (pathPolyline) {
+                pathPolyline.setLatLngs(coords);
+            } else {
+                pathPolyline = L.polyline(coords, {
+                    color:'#FF5F1F', weight:4, opacity:0.75, dashArray:'8 5', lineJoin:'round'
+                }).addTo(map);
+            }
+        }
+    }
+
+    // Smooth 800ms marker animation
+    function animateMarker(marker, newLatLng) {
+        const s = marker.getLatLng();
+        const start = performance.now();
+        const dur   = 800;
+        function step(now) {
+            const t = Math.min((now - start) / dur, 1);
+            marker.setLatLng([s.lat + (newLatLng[0]-s.lat)*t, s.lng + (newLatLng[1]-s.lng)*t]);
+            if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    // ── ETA countdown ──────────────────────────────────────────────
+    function updateETA(data) {
+        if (!data.event_time) {
+            document.getElementById('eta-sub').textContent = `GPS updated: ${new Date(data.recorded_at).toLocaleTimeString()}`;
+            return;
+        }
+        etaEndTime   = new Date(data.event_time).getTime();
+        etaTotalSecs = Math.max(1, Math.round((etaEndTime - Date.now()) / 1000));
+        clearInterval(countdownHandle);
+        tickCountdown();
+        countdownHandle = setInterval(tickCountdown, 1000);
+    }
+
+    function tickCountdown() {
+        const remainSecs = Math.max(0, Math.floor((etaEndTime - Date.now()) / 1000));
+        const mins = Math.floor(remainSecs / 60);
+        const secs = remainSecs % 60;
+
+        document.getElementById('eta-mins').textContent  = mins;
+        document.getElementById('eta-secs').textContent  = String(secs).padStart(2,'0');
+        document.getElementById('eta-colon').classList.remove('hidden');
+        document.getElementById('eta-secs').classList.remove('hidden');
+        document.getElementById('eta-unit').classList.add('hidden');
+
+        // Progress bar
+        if (etaTotalSecs > 0) {
+            const pct = Math.min(100, Math.round(((etaTotalSecs - remainSecs) / etaTotalSecs) * 100));
+            document.getElementById('eta-bar').style.width = pct + '%';
+        }
+
+        if (remainSecs <= 0) {
+            document.getElementById('eta-sub').textContent = 'Arriving now!';
+            clearInterval(countdownHandle);
+        } else if (mins < 5) {
+            document.getElementById('eta-sub').textContent = '🔥 Driver is very close!';
+            showNearbyAlert();
+        } else {
+            document.getElementById('eta-sub').textContent = `${mins}m ${secs}s until your event time`;
+        }
+    }
+
+    function showNearbyAlert() {
+        if (nearbyAlerted) return;
+        nearbyAlerted = true;
+        const el = document.getElementById('nearby-alert');
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('hidden'), 12000);
+    }
+
+    // ── Driver info ────────────────────────────────────────────────
+    function showDriverInfo(name) {
+        document.getElementById('driver-full-name').textContent = name;
+        document.getElementById('driver-avatar').textContent    = name.charAt(0).toUpperCase();
+        document.getElementById('driver-info-card').classList.remove('hidden');
+    }
+
+    // ── Progress steps ─────────────────────────────────────────────
+    function updateProgressSteps(status) {
+        const order = ['Pending','Preparing','Ready','Dispatched','In Transit','Delivered'];
+        const idx   = order.indexOf(status);
+        [{ id:'prog-confirmed', min:0 },{ id:'prog-dispatched', min:3 },
+         { id:'prog-transit',   min:4 },{ id:'prog-delivered',  min:5 }].forEach(s => {
+            if (idx >= s.min) {
+                const el = document.getElementById(s.id);
+                el.querySelector('.prog-dot').style.background = '#ea580c';
+                el.querySelector('.prog-label').classList.replace('text-gray-400','text-orange-700');
+            }
+        });
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('lookup-error');
+        el.textContent = msg; el.classList.remove('hidden');
+    }
+
+    function resetTracking() {
+        clearInterval(pollHandle); clearInterval(countdownHandle);
+        if (map) { map.remove(); map = null; }
+        driverMarker=null; pathPolyline=null; currentDeliveryId=null;
+        etaEndTime=null; etaTotalSecs=null; nearbyAlerted=false;
+        document.getElementById('tracking-panel').classList.add('hidden');
+        document.getElementById('lookup-panel').classList.remove('hidden');
+        document.getElementById('order-code-input').value = '';
+        document.getElementById('nearby-alert').classList.add('hidden');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const code = new URLSearchParams(window.location.search).get('order');
+        if (code) { document.getElementById('order-code-input').value = code; lookupByCode(); }
+    });
+    </script>
+</body>
+</html>

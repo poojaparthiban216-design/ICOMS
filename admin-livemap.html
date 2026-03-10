@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kadambaas — Live Driver Map</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FFF9F6; }
+        .cyan-header { background: linear-gradient(90deg, #0891b2 0%, #06b6d4 100%); }
+        .card-shadow { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.06); }
+        #map { height: calc(100vh - 280px); min-height: 360px; border-radius: 1.5rem; z-index: 0; }
+        .leaflet-popup-content-wrapper { border-radius: 1rem !important; font-family: 'Plus Jakarta Sans', sans-serif; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .live-dot { animation: pulse 1.4s ease-in-out infinite; }
+        @keyframes slideIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+        .driver-card { animation: slideIn 0.2s ease; }
+    </style>
+</head>
+<body class="min-h-screen pb-6">
+
+    <header class="cyan-header px-8 py-4 flex justify-between items-center text-white shadow-lg">
+        <div class="flex items-center gap-3">
+            <a href="admin.html" class="bg-white/20 p-2 rounded-lg hover:bg-white/30 transition text-lg">←</a>
+            <div class="bg-white/20 p-2 rounded-xl text-xl">🗺️</div>
+            <div>
+                <h1 class="font-extrabold text-xl tracking-tighter leading-none">KADAMBAAS</h1>
+                <p class="text-[10px] text-white/70 font-medium tracking-widest">LIVE DRIVER MAP</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full text-sm font-semibold">
+                <span class="live-dot w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+                <span id="driver-count">0 Active</span>
+            </div>
+            <span class="text-xs text-white/60" id="last-refresh">—</span>
+            <button onclick="refresh()" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-semibold transition">
+                ↻ Refresh
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-5 space-y-4">
+
+        <!-- Driver Cards Strip -->
+        <div id="driver-strip" class="flex gap-3 overflow-x-auto pb-1 min-h-[80px] items-center">
+            <div class="text-gray-400 text-sm italic animate-pulse">Loading active drivers…</div>
+        </div>
+
+        <!-- Map -->
+        <div class="bg-white rounded-3xl p-3 card-shadow border border-gray-100">
+            <div id="map"></div>
+            <div class="flex items-center justify-between px-2 pt-2">
+                <p class="text-xs text-gray-400">🔴 Each marker = driver's last known location. Click for order details.</p>
+                <p class="text-xs text-gray-400">Auto-refreshes every 30s</p>
+            </div>
+        </div>
+
+        <!-- No drivers state -->
+        <div id="no-drivers" class="hidden bg-white rounded-3xl p-10 card-shadow border border-gray-100 text-center">
+            <div class="text-5xl mb-3">🚗</div>
+            <p class="font-bold text-gray-700 text-lg">No Active Deliveries</p>
+            <p class="text-sm text-gray-400 mt-1">All drivers are currently available or offline.</p>
+        </div>
+
+    </main>
+
+    <script>
+    // ── State ──────────────────────────────────────────────────────
+    let map        = null;
+    let markers    = {};  // driver_id → L.marker
+    let refreshTimer = null;
+
+    const driverIcon = (initial) => L.divIcon({
+        html: `<div style="background:linear-gradient(135deg,#0891b2,#06b6d4);width:44px;height:44px;border-radius:50%;border:3px solid white;box-shadow:0 4px 14px rgba(8,145,178,0.45);display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:18px;font-family:sans-serif;">${initial}</div>`,
+        iconSize:[44,44], iconAnchor:[22,22], className:''
+    });
+
+    // ── Init map centred on Bengaluru ──────────────────────────────
+    function initMap() {
+        if (map) return;
+        map = L.map('map').setView([12.9716, 77.5946], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+            maxZoom: 19
+        }).addTo(map);
+    }
+
+    // ── Load + render all active drivers ──────────────────────────
+    async function refresh() {
+        try {
+            const res     = await fetch('http://localhost:3000/api/admin/live-drivers');
+            const drivers = await res.json();
+
+            document.getElementById('last-refresh').textContent =
+                'Updated ' + new Date().toLocaleTimeString();
+
+            if (!Array.isArray(drivers) || drivers.length === 0) {
+                document.getElementById('driver-count').textContent = '0 Active';
+                document.getElementById('driver-strip').innerHTML =
+                    '<p class="text-gray-400 text-sm italic">No drivers on the road right now.</p>';
+                document.getElementById('no-drivers').classList.remove('hidden');
+                // Remove all existing markers
+                Object.values(markers).forEach(m => m.remove());
+                markers = {};
+                return;
+            }
+
+            document.getElementById('no-drivers').classList.add('hidden');
+            document.getElementById('driver-count').textContent = `${drivers.length} Active`;
+            initMap();
+            renderCards(drivers);
+            renderMarkers(drivers);
+
+        } catch (err) {
+            document.getElementById('driver-strip').innerHTML =
+                `<p class="text-red-400 text-sm font-medium">⚠ Cannot reach server: ${err.message}</p>`;
+        }
+    }
+
+    // ── Render driver summary cards ────────────────────────────────
+    function renderCards(drivers) {
+        document.getElementById('driver-strip').innerHTML = drivers.map(d => `
+            <div class="driver-card flex-shrink-0 bg-white rounded-2xl p-4 card-shadow border border-gray-100 flex items-center gap-3 cursor-pointer hover:border-cyan-300 transition min-w-[220px]"
+                 onclick="focusDriver(${d.driver_id}, ${d.latitude}, ${d.longitude})">
+                <div class="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-700 font-black text-lg flex items-center justify-center flex-shrink-0">
+                    ${d.driver_name.charAt(0).toUpperCase()}
+                </div>
+                <div class="min-w-0">
+                    <p class="font-bold text-gray-800 text-sm truncate">${d.driver_name}</p>
+                    <p class="text-xs text-cyan-600 font-semibold truncate">${d.order_code}</p>
+                    <p class="text-[10px] text-gray-400 mt-0.5">
+                        ${d.last_update ? 'Updated ' + new Date(d.last_update).toLocaleTimeString() : 'No location yet'}
+                    </p>
+                </div>
+                <span class="ml-auto px-2 py-1 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600 flex-shrink-0">
+                    ${d.order_status}
+                </span>
+            </div>
+        `).join('');
+    }
+
+    // ── Render / update map markers ────────────────────────────────
+    function renderMarkers(drivers) {
+        const activeIds = new Set();
+
+        drivers.forEach(d => {
+            const lat = parseFloat(d.latitude);
+            const lng = parseFloat(d.longitude);
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            activeIds.add(d.driver_id);
+            const popupHtml = `
+                <div style="min-width:160px">
+                    <b style="font-size:14px">${d.driver_name}</b><br>
+                    <span style="color:#0891b2;font-weight:600">${d.order_code}</span><br>
+                    <span style="font-size:11px;color:#888">Status: ${d.order_status}</span><br>
+                    <span style="font-size:11px;color:#aaa">
+                        ${d.last_update ? 'Last seen: ' + new Date(d.last_update).toLocaleTimeString() : 'No GPS data yet'}
+                    </span>
+                </div>`;
+
+            if (markers[d.driver_id]) {
+                // Smoothly animate to new position
+                animateMarker(markers[d.driver_id], [lat, lng]);
+                markers[d.driver_id].setPopupContent(popupHtml);
+            } else {
+                markers[d.driver_id] = L.marker([lat, lng], {
+                    icon: driverIcon(d.driver_name.charAt(0).toUpperCase())
+                }).addTo(map).bindPopup(popupHtml);
+            }
+        });
+
+        // Remove markers for drivers no longer active
+        Object.entries(markers).forEach(([id, marker]) => {
+            if (!activeIds.has(parseInt(id))) {
+                marker.remove();
+                delete markers[id];
+            }
+        });
+    }
+
+    function animateMarker(marker, newLatLng) {
+        const s = marker.getLatLng();
+        const start = performance.now();
+        const dur = 800;
+        function step(now) {
+            const t = Math.min((now - start) / dur, 1);
+            marker.setLatLng([s.lat + (newLatLng[0]-s.lat)*t, s.lng + (newLatLng[1]-s.lng)*t]);
+            if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    // ── Focus map on a driver ──────────────────────────────────────
+    function focusDriver(driverId, lat, lng) {
+        if (!lat || !lng || isNaN(parseFloat(lat))) return;
+        map.flyTo([parseFloat(lat), parseFloat(lng)], 15, { duration: 1.2 });
+        if (markers[driverId]) markers[driverId].openPopup();
+    }
+
+    // ── Auth guard & init ──────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        if (localStorage.getItem('role') !== 'Admin') {
+            alert('Access Denied: Admin privileges required.');
+            window.location.href = 'login.html';
+            return;
+        }
+        initMap();
+        refresh();
+        refreshTimer = setInterval(refresh, 30000); // auto-refresh every 30s
+    });
+
+    window.addEventListener('beforeunload', () => clearInterval(refreshTimer));
+    </script>
+</body>
+</html>
