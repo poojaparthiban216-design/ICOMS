@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kadambaas — Driver Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #F0FDF4; }
+        .green-header { background: linear-gradient(90deg, #15803d 0%, #16a34a 100%); }
+        .card-shadow  { box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.06); }
+
+        /* Toggle switch */
+        .toggle-wrap { display: flex; align-items: center; gap: 14px; }
+        .toggle-track {
+            width: 68px; height: 34px; border-radius: 9999px;
+            background: #d1d5db; position: relative;
+            cursor: pointer; transition: background 0.3s ease;
+            flex-shrink: 0;
+        }
+        .toggle-track.on { background: #16a34a; }
+        .toggle-thumb {
+            position: absolute; top: 3px; left: 3px;
+            width: 28px; height: 28px; border-radius: 9999px;
+            background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+            transition: transform 0.3s ease;
+        }
+        .toggle-track.on .toggle-thumb { transform: translateX(34px); }
+
+        /* Pulse badge */
+        @keyframes livePulse {
+            0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.5); }
+            50%      { box-shadow: 0 0 0 8px rgba(22,163,74,0);  }
+        }
+        .live-ring { animation: livePulse 1.5s ease-in-out infinite; }
+
+        /* Status step */
+        .step-done  .step-dot { background: #16a34a; }
+        .step-done  .step-label { color: #15803d; font-weight: 700; }
+        .step-active .step-dot { background: #f97316; animation: livePulse 1.5s infinite; }
+        .step-active .step-label { color: #ea580c; font-weight: 700; }
+    </style>
+</head>
+<body class="min-h-screen pb-10">
+
+    <!-- ── Header ──────────────────────────────────────────────── -->
+    <header class="green-header px-6 py-4 flex justify-between items-center text-white shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-white/20 p-2 rounded-xl text-xl">🚗</div>
+            <div>
+                <h1 class="font-bold text-lg tracking-tighter leading-none">KADAMBAAS</h1>
+                <p class="text-xs text-white/70 font-medium">Driver Portal</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <span id="driver-name-header"
+                  class="text-sm font-semibold bg-white/20 px-3 py-1.5 rounded-full">
+                Loading…
+            </span>
+            <a href="login.html"
+               onclick="localStorage.clear()"
+               class="text-sm text-white/80 hover:text-white font-medium">Logout →</a>
+        </div>
+    </header>
+
+    <!-- ── Main ────────────────────────────────────────────────── -->
+    <main class="max-w-md mx-auto px-4 pt-5 space-y-4">
+
+        <!-- Current Delivery Card -->
+        <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+                Your Active Delivery
+            </p>
+            <div id="delivery-card">
+                <!-- Populated by JS -->
+                <div class="flex gap-3 animate-pulse">
+                    <div class="w-12 h-12 bg-gray-100 rounded-2xl flex-shrink-0"></div>
+                    <div class="flex-1 space-y-2 pt-1">
+                        <div class="h-4 bg-gray-100 rounded w-3/4"></div>
+                        <div class="h-3 bg-gray-100 rounded w-1/2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GPS Toggle Card -->
+        <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                        GPS Tracking
+                    </p>
+                    <p id="gps-label" class="text-lg font-bold text-gray-600 mt-0.5">
+                        Inactive
+                    </p>
+                </div>
+                <div class="toggle-wrap">
+                    <div class="toggle-track" id="gpsToggle" onclick="handleGpsToggle()">
+                        <div class="toggle-thumb"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coords display -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-gray-50 rounded-2xl p-3 text-center">
+                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Signal</p>
+                    <div id="signal-status" class="flex items-center justify-center gap-1.5 mt-1">
+                        <span class="w-2 h-2 rounded-full bg-gray-300"></span>
+                        <span class="text-sm font-semibold text-gray-400">Standby</span>
+                    </div>
+                </div>
+                <div class="bg-gray-50 rounded-2xl p-3 text-center">
+                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Last Sent</p>
+                    <p id="last-sent" class="text-sm font-bold text-gray-500 mt-1">—</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delivery Progress Steps -->
+        <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
+                Delivery Progress
+            </p>
+            <ol class="relative border-l-2 border-green-200 ml-2 space-y-5 pb-1">
+
+                <li class="ml-5 step-done" id="step-assigned">
+                    <span class="step-dot absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-gray-200"></span>
+                    <p class="step-label text-sm text-gray-400">Assigned to you</p>
+                    <p class="text-xs text-gray-400">Dispatcher has linked you to this order</p>
+                </li>
+
+                <li class="ml-5" id="step-started">
+                    <span class="step-dot absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-gray-200"></span>
+                    <p class="step-label text-sm text-gray-400">Delivery started</p>
+                    <p class="text-xs text-gray-400">You tapped "Start Delivery" below</p>
+                </li>
+
+                <li class="ml-5" id="step-delivered">
+                    <span class="step-dot absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-gray-200"></span>
+                    <p class="step-label text-sm text-gray-400">Delivered</p>
+                    <p class="text-xs text-gray-400">Order handed to client</p>
+                </li>
+            </ol>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="space-y-3" id="action-btns">
+            <button id="btn-start"
+                    onclick="startDelivery()"
+                    class="w-full bg-green-600 hover:bg-green-700 active:scale-95
+                           text-white font-bold py-4 rounded-2xl shadow-md transition-all hidden">
+                🚀 Start Delivery
+            </button>
+            <button id="btn-complete"
+                    onclick="completeDelivery()"
+                    class="w-full bg-orange-600 hover:bg-orange-700 active:scale-95
+                           text-white font-bold py-4 rounded-2xl shadow-md transition-all hidden">
+                ✅ Mark as Delivered
+            </button>
+            <div id="btn-done"
+                 class="w-full bg-gray-100 text-gray-400 font-bold py-4 rounded-2xl
+                        text-center hidden">
+                ✔ Delivery Complete
+            </div>
+        </div>
+
+        <!-- No delivery state -->
+        <div id="no-delivery"
+             class="hidden bg-white rounded-3xl p-8 card-shadow border border-gray-100 text-center">
+            <div class="text-5xl mb-3">📦</div>
+            <p class="font-bold text-gray-700 text-lg">No Delivery Assigned</p>
+            <p class="text-sm text-gray-400 mt-1">
+                Your dispatcher hasn't assigned you to an order yet.<br>
+                This page will update automatically.
+            </p>
+        </div>
+
+    </main>
+
+    <script>
+    // ── State ──────────────────────────────────────────────────────
+    const driver_id  = localStorage.getItem('userId');
+    const driverName = localStorage.getItem('name') || 'Driver';
+
+    let delivery     = null;   // active delivery object from server
+    let gpsActive    = false;
+    let watchId      = null;
+    let gpsInterval  = null;
+    let lastCoords   = null;
+
+    document.getElementById('driver-name-header').textContent = driverName;
+
+    // ── Load active delivery on page open ─────────────────────────
+    async function loadDelivery() {
+        try {
+            const res  = await fetch(`http://localhost:3000/api/driver/${driver_id}/active-delivery`);
+            if (res.status === 404) { showNoDelivery(); return; }
+            delivery = await res.json();
+            renderDeliveryCard();
+        } catch {
+            showNoDelivery();
+        }
+    }
+
+    function renderDeliveryCard() {
+        const status = delivery.order_status;
+
+        document.getElementById('delivery-card').innerHTML = `
+            <div class="flex items-start gap-3">
+                <div class="bg-green-100 text-green-700 font-black text-lg w-12 h-12
+                            rounded-2xl flex items-center justify-center flex-shrink-0">📦</div>
+                <div class="flex-1">
+                    <div class="flex items-center gap-2">
+                        <p class="font-bold text-gray-800 text-lg">${delivery.order_code}</p>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold
+                            ${status === 'In Transit'
+                                ? 'bg-orange-100 text-orange-600'
+                                : 'bg-green-100 text-green-700'}">
+                            ${status}
+                        </span>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-0.5">
+                        ${delivery.client_org || delivery.client_name}
+                    </p>
+                    <p class="text-xs text-gray-400 mt-1">📍 ${delivery.delivery_address || 'Address not set'}</p>
+                    <p class="text-xs text-gray-400 mt-0.5">
+                        🕐 ${delivery.event_time
+                            ? new Date(delivery.event_time).toLocaleString()
+                            : 'Time not set'}
+                    </p>
+                </div>
+            </div>
+        `;
+
+        // Show correct action button
+        if (status === 'Dispatched') {
+            markStep('step-assigned', 'done');
+            document.getElementById('btn-start').classList.remove('hidden');
+        } else if (status === 'In Transit') {
+            markStep('step-assigned', 'done');
+            markStep('step-started',  'done');
+            document.getElementById('btn-complete').classList.remove('hidden');
+            // Auto-enable GPS if in transit
+            if (!gpsActive) activateGps();
+        } else if (status === 'Delivered') {
+            markStep('step-assigned',  'done');
+            markStep('step-started',   'done');
+            markStep('step-delivered', 'done');
+            document.getElementById('btn-done').classList.remove('hidden');
+        }
+    }
+
+    function showNoDelivery() {
+        document.getElementById('delivery-card').innerHTML = '';
+        document.getElementById('no-delivery').classList.remove('hidden');
+    }
+
+    // ── Step helper ────────────────────────────────────────────────
+    function markStep(stepId, state) {
+        const el  = document.getElementById(stepId);
+        const dot = el.querySelector('.step-dot');
+        if (state === 'done') {
+            dot.style.background = '#16a34a';
+            el.querySelector('.step-label').className = 'step-label text-sm text-green-700 font-bold';
+        } else if (state === 'active') {
+            dot.style.background = '#f97316';
+            el.querySelector('.step-label').className = 'step-label text-sm text-orange-600 font-bold';
+        }
+    }
+
+    // ── Start delivery ─────────────────────────────────────────────
+    async function startDelivery() {
+        if (!delivery) return;
+        await fetch('http://localhost:3000/api/driver/start-delivery', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                delivery_id: delivery.delivery_id,
+                order_id:    delivery.order_id,
+                driver_id
+            })
+        });
+        delivery.order_status = 'In Transit';
+        document.getElementById('btn-start').classList.add('hidden');
+        document.getElementById('btn-complete').classList.remove('hidden');
+        markStep('step-started', 'done');
+        activateGps();
+    }
+
+    // ── Complete delivery ──────────────────────────────────────────
+    async function completeDelivery() {
+        if (!confirm('Mark this order as Delivered?')) return;
+        await fetch('http://localhost:3000/api/driver/complete-delivery', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                delivery_id: delivery.delivery_id,
+                order_id:    delivery.order_id,
+                driver_id
+            })
+        });
+        deactivateGps();
+        delivery.order_status = 'Delivered';
+        document.getElementById('btn-complete').classList.add('hidden');
+        document.getElementById('btn-done').classList.remove('hidden');
+        markStep('step-delivered', 'done');
+    }
+
+    // ── GPS toggle ─────────────────────────────────────────────────
+    function handleGpsToggle() {
+        if (!delivery) {
+            alert('No active delivery. GPS tracking is only available during a delivery.');
+            return;
+        }
+        gpsActive ? deactivateGps() : requestAndActivateGps();
+    }
+
+    function requestAndActivateGps() {
+        if (!navigator.geolocation) {
+            alert('Geolocation is not supported on this device.');
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            () => activateGps(),
+            () => alert('Location permission denied. Please enable it in your browser settings.')
+        );
+    }
+
+    function activateGps() {
+        gpsActive = true;
+        document.getElementById('gpsToggle').classList.add('on');
+        document.getElementById('gps-label').textContent = 'Broadcasting Live';
+        document.getElementById('gps-label').className =
+            'text-lg font-bold text-green-600 mt-0.5';
+
+        // Watch position continuously
+        watchId = navigator.geolocation.watchPosition(
+            pos => { lastCoords = pos.coords; },
+            err => console.warn('GPS error:', err.message),
+            { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
+        );
+
+        // Push every 60 seconds
+        pushLocation(); // immediate
+        gpsInterval = setInterval(pushLocation, 60000);
+    }
+
+    function deactivateGps() {
+        gpsActive = false;
+        if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+        clearInterval(gpsInterval); gpsInterval = null;
+        document.getElementById('gpsToggle').classList.remove('on');
+        document.getElementById('gps-label').textContent = 'Inactive';
+        document.getElementById('gps-label').className = 'text-lg font-bold text-gray-600 mt-0.5';
+        document.getElementById('signal-status').innerHTML = `
+            <span class="w-2 h-2 rounded-full bg-gray-300"></span>
+            <span class="text-sm font-semibold text-gray-400">Standby</span>`;
+    }
+
+    // ── Push location to server ────────────────────────────────────
+    async function pushLocation() {
+        if (!delivery || !gpsActive) return;
+
+        const getPos = () => new Promise((resolve, reject) =>
+            navigator.geolocation.getCurrentPosition(resolve, reject,
+                { enableHighAccuracy: true, timeout: 10000 })
+        );
+
+        try {
+            const pos = lastCoords
+                ? { latitude: lastCoords.latitude, longitude: lastCoords.longitude }
+                : await getPos().then(p => p.coords);
+
+            await fetch('https://icoms.onrender.com/api/tracking/update', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    delivery_id: delivery.delivery_id,
+                    latitude:    pos.latitude,
+                    longitude:   pos.longitude
+                })
+            });
+
+            document.getElementById('last-sent').textContent =
+                new Date().toLocaleTimeString();
+            document.getElementById('signal-status').innerHTML = `
+                <span class="w-2 h-2 rounded-full bg-green-500 live-ring"></span>
+                <span class="text-sm font-semibold text-green-600">Live</span>`;
+
+        } catch (err) {
+            console.error('GPS push failed:', err);
+            document.getElementById('signal-status').innerHTML = `
+                <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                <span class="text-sm font-semibold text-red-500">Error</span>`;
+        }
+    }
+
+    // ── Stop GPS if driver navigates away ─────────────────────────
+    window.addEventListener('beforeunload', () => { if (gpsActive) deactivateGps(); });
+
+    // ── Init ──────────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', loadDelivery);
+    </script>
+</body>
+</html>

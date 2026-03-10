@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FFF9F6; }
+        .cyan-header { background: linear-gradient(90deg, #0891b2 0%, #06b6d4 100%); }
+        .card-shadow { box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+    </style>
+</head>
+<body class="min-h-screen pb-10">
+
+    <header class="cyan-header px-8 py-4 flex justify-between items-center text-white shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-white/20 p-2 rounded-lg">🚚</div>
+            <h1 class="font-bold text-xl tracking-tighter">KADAMBAAS</h1>
+        </div>
+        <div class="flex items-center gap-6 text-sm font-medium">
+            <span class="bg-white/20 px-3 py-1 rounded-full border border-white/30">Dispatch Portal</span>
+            <a href="login.html" class="opacity-80 hover:opacity-100 flex items-center gap-1">Logout →</a>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-8">
+
+        <!-- Stats Row -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-3xl border-t-8 border-cyan-500 card-shadow">
+                <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Available Vessels</p>
+                <div class="flex items-end gap-2 mt-2">
+                    <span id="vessel-count" class="text-4xl font-black text-cyan-600">42</span>
+                    <span class="text-gray-400 mb-1 font-semibold">Units</span>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-3xl border-t-8 border-orange-500 card-shadow">
+                <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Pending Dispatch</p>
+                <div class="flex items-end gap-2 mt-2">
+                    <span id="pending-count" class="text-4xl font-black text-orange-500">0</span>
+                    <span class="text-gray-400 mb-1 font-semibold">Orders</span>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-3xl border-t-8 border-emerald-500 card-shadow">
+                <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Vessel Efficiency</p>
+                <div class="flex items-end gap-2 mt-2">
+                    <span class="text-4xl font-black text-emerald-600">94%</span>
+                    <span class="text-gray-400 mb-1 font-semibold">Return Rate</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="grid lg:grid-cols-3 gap-8">
+
+            <!-- Orders Table -->
+            <div class="lg:col-span-2 space-y-6">
+                <h2 class="text-2xl font-bold text-[#1A2B48] flex items-center gap-2">
+                    <span>📦</span> Orders Awaiting Dispatch
+                </h2>
+                <div class="bg-white rounded-[2rem] overflow-hidden card-shadow border border-gray-100">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50 border-b border-gray-100">
+                            <tr>
+                                <th class="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Order Info</th>
+                                <th class="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Current Status</th>
+                                <th class="px-6 py-4 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dispatch-list"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Vessel Tracker -->
+            <div class="space-y-6">
+                <h2 class="text-2xl font-bold text-[#1A2B48]">Vessel Tracker</h2>
+                <div class="bg-white p-6 rounded-[2rem] card-shadow border border-gray-100">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 block mb-2">ADD VESSELS (Check-In)</label>
+                            <input type="number" id="vesselInput" placeholder="Qty"
+                                   class="w-full p-4 bg-gray-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-cyan-400 text-xl font-bold">
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="updateVessels('add')"    class="flex-1 bg-cyan-600 text-white font-bold py-3 rounded-xl hover:bg-cyan-700 transition">+ Add</button>
+                            <button onclick="updateVessels('remove')" class="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition">- Use</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- ── Assign Driver Modal ──────────────────────────────────── -->
+    <div id="assign-modal"
+         class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+
+            <!-- Modal header -->
+            <div class="bg-gradient-to-r from-cyan-600 to-cyan-500 px-6 py-4 flex justify-between items-center">
+                <div>
+                    <h3 class="font-bold text-white text-lg">Assign Driver</h3>
+                    <p id="modal-order-label" class="text-cyan-100 text-xs mt-0.5">Order #—</p>
+                </div>
+                <button onclick="closeModal()" class="text-white/80 hover:text-white text-2xl leading-none">×</button>
+            </div>
+
+            <!-- Driver list -->
+            <div class="p-5">
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Available Drivers</p>
+                <div id="driver-list-modal" class="space-y-2 max-h-60 overflow-y-auto">
+                    <div class="text-center py-6 text-gray-400 italic text-sm">Loading available drivers…</div>
+                </div>
+            </div>
+
+            <!-- Confirm button -->
+            <div class="px-5 pb-5">
+                <button id="confirm-assign-btn"
+                        onclick="confirmAssign()"
+                        disabled
+                        class="w-full bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-200
+                               disabled:text-gray-400 text-white font-bold py-3 rounded-2xl
+                               transition-all active:scale-95">
+                    Confirm Assignment
+                </button>
+                <p id="modal-error" class="text-red-500 text-xs text-center mt-2 hidden"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── State ──────────────────────────────────────────────────
+        let pendingOrderId   = null;
+        let selectedDriverId = null;
+        let currentVessels   = 0;
+
+        // ── Load orders ────────────────────────────────────────────
+        async function loadDispatchOrders() {
+            const list = document.getElementById('dispatch-list');
+            try {
+                const response = await fetch('http://localhost:3000/api/dispatch/orders');
+                const orders   = await response.json();
+
+                document.getElementById('pending-count').innerText = orders.length;
+
+                if (orders.length === 0) {
+                    list.innerHTML = `<tr><td colspan="3" class="px-6 py-10 text-center text-gray-400 italic">No orders ready for dispatch.</td></tr>`;
+                    return;
+                }
+
+                list.innerHTML = orders.map(o => `
+                    <tr class="border-b border-gray-50 hover:bg-cyan-50/30 transition">
+                        <td class="px-6 py-5">
+                            <div class="font-bold text-gray-800">${o.name}</div>
+                            <div class="text-xs text-gray-500">ID: ${o.id}</div>
+                        </td>
+                        <td class="px-6 py-5">
+                            <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600 uppercase">${o.status}</span>
+                        </td>
+                        <td class="px-6 py-5 text-right">
+                            <button onclick="assignDriver('${o.id}')" class="text-cyan-600 font-bold text-sm hover:underline">Assign Driver →</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load orders:', err);
+            }
+        }
+
+        // ── Vessel management ──────────────────────────────────────
+        async function loadVessels() {
+            const response = await fetch('http://localhost:3000/api/dispatch/vessels');
+            const data     = await response.json();
+            currentVessels = data.count;
+            document.getElementById('vessel-count').innerText = currentVessels;
+        }
+
+        async function updateVessels(action) {
+            const val = parseInt(document.getElementById('vesselInput').value);
+            if (!val) return;
+            if (action === 'add') currentVessels += val;
+            else                  currentVessels -= val;
+
+            await fetch('http://localhost:3000/api/dispatch/vessels/update', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ newCount: currentVessels })
+            });
+
+            document.getElementById('vessel-count').innerText = currentVessels;
+            document.getElementById('vesselInput').value = '';
+        }
+
+        // ── Open assign-driver modal ───────────────────────────────
+        async function assignDriver(order_id) {
+            pendingOrderId   = order_id;
+            selectedDriverId = null;
+
+            const modal = document.getElementById('assign-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            document.getElementById('modal-order-label').textContent  = `Order #${order_id}`;
+            document.getElementById('confirm-assign-btn').disabled    = true;
+            document.getElementById('confirm-assign-btn').textContent = 'Confirm Assignment';
+            document.getElementById('modal-error').classList.add('hidden');
+            document.getElementById('driver-list-modal').innerHTML    =
+                '<div class="text-center py-6 text-gray-400 italic text-sm">Loading available drivers…</div>';
+
+            try {
+                const res     = await fetch('http://localhost:3000/api/dispatch/available-drivers');
+                const drivers = await res.json();
+
+                if (drivers.length === 0) {
+                    document.getElementById('driver-list-modal').innerHTML =
+                        '<div class="text-center py-6 text-gray-400 italic text-sm">No drivers available right now.</div>';
+                    return;
+                }
+
+                document.getElementById('driver-list-modal').innerHTML = drivers.map(d => `
+                    <div class="driver-option flex items-center gap-3 p-3 border-2 border-transparent
+                                rounded-2xl cursor-pointer hover:border-cyan-300 hover:bg-cyan-50 transition-all"
+                         id="driver-opt-${d.user_id}"
+                         onclick="selectDriver(${d.user_id}, '${d.name}')">
+                        <div class="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-700 font-black text-lg
+                                    flex items-center justify-center flex-shrink-0">
+                            ${d.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <p class="font-bold text-gray-800 text-sm">${d.name}</p>
+                            <p class="text-xs text-green-600 font-semibold">● Available</p>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                document.getElementById('driver-list-modal').innerHTML =
+                    `<div class="text-center py-4 text-red-400 text-sm">Failed to load drivers: ${err.message}</div>`;
+            }
+        }
+
+        // ── Select a driver ────────────────────────────────────────
+        function selectDriver(driver_id, name) {
+            selectedDriverId = driver_id;
+            document.querySelectorAll('.driver-option').forEach(el => {
+                el.classList.remove('border-cyan-500', 'bg-cyan-50');
+            });
+            const selected = document.getElementById(`driver-opt-${driver_id}`);
+            if (selected) selected.classList.add('border-cyan-500', 'bg-cyan-50');
+
+            const btn = document.getElementById('confirm-assign-btn');
+            btn.disabled    = false;
+            btn.textContent = `Assign ${name} →`;
+        }
+
+        // ── Confirm assignment ─────────────────────────────────────
+        async function confirmAssign() {
+            if (!pendingOrderId || !selectedDriverId) return;
+            const btn = document.getElementById('confirm-assign-btn');
+            btn.disabled    = true;
+            btn.textContent = 'Assigning…';
+
+            try {
+                const res  = await fetch('https://icoms.onrender.com/api/dispatch/assign-driver', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ order_id: pendingOrderId, driver_id: selectedDriverId })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Assignment failed');
+                closeModal();
+                loadDispatchOrders();
+            } catch (err) {
+                document.getElementById('modal-error').textContent = err.message;
+                document.getElementById('modal-error').classList.remove('hidden');
+                btn.disabled    = false;
+                btn.textContent = 'Confirm Assignment';
+            }
+        }
+
+        // ── Close modal ────────────────────────────────────────────
+        function closeModal() {
+            const modal = document.getElementById('assign-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            pendingOrderId   = null;
+            selectedDriverId = null;
+        }
+
+        document.getElementById('assign-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        // ── Init ───────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDispatchOrders();
+            loadVessels();
+        });
+    </script>
+</body>
+</html>

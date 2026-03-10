@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .notification-card.read {
+            border-left-color: #e5e7eb;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body class="bg-[#FFF9F6] min-h-screen">
+
+    <header class="bg-gradient-to-r from-[#E31E24] to-[#FF5F1F] px-8 py-3 text-white flex justify-between items-center shadow-md">
+        <div class="flex items-center gap-2">
+            <span class="font-bold tracking-tighter">KADAMBAAS</span>
+        </div>
+        <div class="text-sm">
+            <a href="admin.html" class="opacity-80 hover:underline">Dashboard</a> / Notifications
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto p-8">
+        <div class="flex justify-between items-center mb-8">
+            <div class="flex items-center gap-4">
+                <h2 class="text-4xl font-serif text-[#1A2B48] font-bold">Notifications</h2>
+                <span id="new-badge" class="bg-[#FF4500] text-white px-3 py-1 rounded-full text-sm font-bold transition-opacity duration-300">2 new</span>
+            </div>
+            <button onclick="markAllRead()" class="border border-gray-300 bg-white px-6 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition shadow-sm active:scale-95">
+                Mark all as read
+            </button>
+        </div>
+
+        <div class="space-y-4">
+            <div class="notification-card bg-white p-6 rounded-2xl shadow-sm border-l-4 border-orange-500 flex items-start gap-4 transition-all duration-300">
+                <div class="bg-orange-100 p-2 rounded-lg">🔔</div>
+                <div>
+                    <h4 class="font-bold text-gray-800">New Order Received</h4>
+                    <p class="text-gray-500 text-sm">Order #8829 is pending supervisor approval.</p>
+                    <p class="text-xs text-gray-400 mt-2">2 minutes ago</p>
+                </div>
+            </div>
+
+            <div class="notification-card bg-white p-6 rounded-2xl shadow-sm border-l-4 border-blue-500 flex items-start gap-4 transition-all duration-300">
+                <div class="bg-blue-100 p-2 rounded-lg">🚚</div>
+                <div>
+                    <h4 class="font-bold text-gray-800">Driver Assigned</h4>
+                    <p class="text-gray-500 text-sm">Driver Rajesh has picked up Order #8810.</p>
+                    <p class="text-xs text-gray-400 mt-2">1 hour ago</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function loadLiveNotifications() {
+            const container = document.querySelector('.space-y-4');
+            const badge     = document.getElementById('new-badge');
+            const orders    = JSON.parse(localStorage.getItem('kadambaas_orders')) || [];
+            const deliveredOrders = orders.filter(o => o.status === 'Delivered');
+
+            if (deliveredOrders.length > 0) {
+                badge.innerText = `${deliveredOrders.length} new`;
+                badge.style.display = 'inline-block';
+                container.innerHTML = deliveredOrders.map(order => `
+                    <div class="notification-card bg-white p-6 rounded-2xl shadow-sm border-l-4 border-green-500 flex items-start gap-4 transition-all duration-300">
+                        <div class="bg-green-100 p-2 rounded-lg">✅</div>
+                        <div>
+                            <h4 class="font-bold text-gray-800">Order Delivered</h4>
+                            <p class="text-gray-500 text-sm">Order ${order.id} for ${order.name} has been successfully delivered.</p>
+                            <p class="text-xs text-gray-400 mt-2">Just now</p>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = '<p class="text-center text-gray-400 py-10">No new notifications</p>';
+                badge.style.display = 'none';
+            }
+        }
+
+        function markAllRead() {
+            const badge = document.getElementById('new-badge');
+            if (badge) {
+                badge.style.opacity = '0';
+                setTimeout(() => badge.remove(), 300);
+            }
+            document.querySelectorAll('.notification-card').forEach(card => {
+                card.classList.add('read');
+                card.classList.remove('border-green-500');
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', loadLiveNotifications);
+    </script>
+</body>
+</html>
