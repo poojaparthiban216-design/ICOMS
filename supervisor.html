@@ -172,7 +172,7 @@
         async function loadOrdersIntoDropdown() {
             const dropdown = document.getElementById('orderDropdown');
             try {
-                const res    = await fetch('http://localhost:3000/api/orders');
+                const res    = await fetch('https://icoms.onrender.com/api/orders');
                 const orders = await res.json();
                 const active = orders.filter(o => o.order_status !== 'Delivered' && o.order_status !== 'Cancelled');
 
@@ -196,7 +196,7 @@
             if (!orderId) return alert('Select an order first!');
 
             try {
-                const res = await fetch(`http://localhost:3000/api/orders/${orderId}/status`, {
+                const res = await fetch(`https://icoms.onrender.com/api/orders/${orderId}/status`, {
                     method:  'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify({ order_status: newStatus })
