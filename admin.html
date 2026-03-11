@@ -147,7 +147,7 @@
 
         async function fetchStats() {
             try {
-                const res  = await fetch('http://localhost:3000/api/admin/stats');
+                const res  = await fetch('https://icoms.onrender.com/api/admin/stats');
                 const data = await res.json();
                 animateCount('orderCount', data.totalOrders || 0);
                 animateCount('userCount',  data.totalUsers  || 0);

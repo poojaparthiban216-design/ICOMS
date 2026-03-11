@@ -172,7 +172,7 @@
             btn.textContent = 'Saving…';
 
             try {
-                const res  = await fetch('http://localhost:3000/api/orders', {
+                const res  = await fetch('https://icoms.onrender.com/api/orders', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify({ order_code, customer_name, order_status, event_time: event_time || null })
@@ -199,7 +199,7 @@
         async function deleteOrder(orderId) {
             if (!confirm('Are you sure you want to delete this order?')) return;
             try {
-                await fetch(`http://localhost:3000/api/orders/${orderId}`, { method: 'DELETE' });
+                await fetch(`https://icoms.onrender.com/api/orders/${orderId}`, { method: 'DELETE' });
                 loadOrders();
             } catch (err) {
                 alert('Failed to delete: ' + err.message);
@@ -209,7 +209,7 @@
         // ── LOAD orders from MySQL ─────────────────────────────────
         async function loadOrders() {
             try {
-                const res  = await fetch('http://localhost:3000/api/orders');
+                const res  = await fetch('https://icoms.onrender.com/api/orders');
                 allOrders  = await res.json();
                 filterRender();
             } catch (err) {
