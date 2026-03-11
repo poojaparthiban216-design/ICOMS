@@ -1,14 +1,11 @@
 {
   "name": "public",
   "version": "1.0.0",
-  "description": "",
+  "description": "Kadambaas I-COMS backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "cors": "^2.8.6",
