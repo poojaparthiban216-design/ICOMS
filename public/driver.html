@@ -5,19 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kadambaas — Driver Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #F0FDF4; }
         .green-header { background: linear-gradient(90deg, #15803d 0%, #16a34a 100%); }
-        .card-shadow  { box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.06); }
+        .card-shadow  { box-shadow: 0 10px 25px -5px rgba(0,0,0,0.06); }
 
         /* Toggle switch */
-        .toggle-wrap { display: flex; align-items: center; gap: 14px; }
         .toggle-track {
             width: 68px; height: 34px; border-radius: 9999px;
             background: #d1d5db; position: relative;
-            cursor: pointer; transition: background 0.3s ease;
-            flex-shrink: 0;
+            cursor: pointer; transition: background 0.3s ease; flex-shrink: 0;
         }
         .toggle-track.on { background: #16a34a; }
         .toggle-thumb {
@@ -35,11 +35,25 @@
         }
         .live-ring { animation: livePulse 1.5s ease-in-out infinite; }
 
-        /* Status step */
-        .step-done  .step-dot { background: #16a34a; }
-        .step-done  .step-label { color: #15803d; font-weight: 700; }
-        .step-active .step-dot { background: #f97316; animation: livePulse 1.5s infinite; }
-        .step-active .step-label { color: #ea580c; font-weight: 700; }
+        /* Leaflet map */
+        #driver-map {
+            height: 260px;
+            border-radius: 1rem;
+            z-index: 0;
+        }
+        .leaflet-popup-content-wrapper {
+            border-radius: 0.75rem !important;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        /* ETA bar */
+        #eta-bar { transition: width 0.8s ease; }
+
+        @keyframes fadeIn {
+            from { opacity:0; transform:translateY(6px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+        .fade-in { animation: fadeIn 0.3s ease; }
     </style>
 </head>
 <body class="min-h-screen pb-10">
@@ -58,7 +72,7 @@
                   class="text-sm font-semibold bg-white/20 px-3 py-1.5 rounded-full">
                 Loading…
             </span>
-            <a href="login.html"
+            <a href="index.html"
                onclick="localStorage.clear()"
                class="text-sm text-white/80 hover:text-white font-medium">Logout →</a>
         </div>
@@ -67,13 +81,12 @@
     <!-- ── Main ────────────────────────────────────────────────── -->
     <main class="max-w-md mx-auto px-4 pt-5 space-y-4">
 
-        <!-- Current Delivery Card -->
-        <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100">
+        <!-- ── Active Delivery Card ──────────────────────────── -->
+        <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100 fade-in">
             <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
                 Your Active Delivery
             </p>
             <div id="delivery-card">
-                <!-- Populated by JS -->
                 <div class="flex gap-3 animate-pulse">
                     <div class="w-12 h-12 bg-gray-100 rounded-2xl flex-shrink-0"></div>
                     <div class="flex-1 space-y-2 pt-1">
@@ -84,59 +97,74 @@
             </div>
         </div>
 
-        <!-- GPS Toggle Card -->
-        <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100">
+        <!-- ── GPS Toggle + Signal ────────────────────────────── -->
+        <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100 fade-in">
             <div class="flex items-center justify-between mb-4">
                 <div>
-                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                        GPS Tracking
-                    </p>
-                    <p id="gps-label" class="text-lg font-bold text-gray-600 mt-0.5">
-                        Inactive
-                    </p>
+                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">GPS Tracking</p>
+                    <p id="gps-label" class="text-lg font-bold text-gray-600 mt-0.5">Inactive</p>
                 </div>
-                <div class="toggle-wrap">
-                    <div class="toggle-track" id="gpsToggle" onclick="handleGpsToggle()">
-                        <div class="toggle-thumb"></div>
-                    </div>
+                <div class="toggle-track" id="gpsToggle" onclick="handleGpsToggle()">
+                    <div class="toggle-thumb"></div>
                 </div>
             </div>
 
-            <!-- Coords display -->
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-3 gap-3">
                 <div class="bg-gray-50 rounded-2xl p-3 text-center">
                     <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Signal</p>
                     <div id="signal-status" class="flex items-center justify-center gap-1.5 mt-1">
                         <span class="w-2 h-2 rounded-full bg-gray-300"></span>
-                        <span class="text-sm font-semibold text-gray-400">Standby</span>
+                        <span class="text-xs font-semibold text-gray-400">Standby</span>
                     </div>
                 </div>
                 <div class="bg-gray-50 rounded-2xl p-3 text-center">
                     <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Last Sent</p>
-                    <p id="last-sent" class="text-sm font-bold text-gray-500 mt-1">—</p>
+                    <p id="last-sent" class="text-xs font-bold text-gray-500 mt-1">—</p>
+                </div>
+                <div class="bg-gray-50 rounded-2xl p-3 text-center">
+                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Accuracy</p>
+                    <p id="gps-accuracy" class="text-xs font-bold text-gray-500 mt-1">—</p>
                 </div>
             </div>
         </div>
 
-        <!-- Delivery Progress Steps -->
-        <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100">
+        <!-- ── ETA Card (hidden until GPS active + destination known) ── -->
+        <div id="eta-card" class="hidden bg-white rounded-3xl p-5 card-shadow border border-gray-100 fade-in">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">ETA to Client</p>
+            <div class="flex items-end gap-2">
+                <span id="eta-mins" class="text-5xl font-black text-green-600">—</span>
+                <span id="eta-unit" class="text-lg font-bold text-gray-400 mb-1">min</span>
+                <span id="eta-dist" class="ml-auto text-sm font-semibold text-gray-400 mb-1"></span>
+            </div>
+            <div class="mt-3 bg-gray-100 rounded-full h-2 overflow-hidden">
+                <div id="eta-bar" class="h-2 bg-green-500 rounded-full" style="width:0%"></div>
+            </div>
+            <p id="eta-sub" class="text-xs text-gray-400 mt-2">Calculating route…</p>
+        </div>
+
+        <!-- ── Live Map ───────────────────────────────────────── -->
+        <div id="map-card" class="hidden bg-white rounded-3xl p-3 card-shadow border border-gray-100 fade-in">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-1 mb-2">Live Position</p>
+            <div id="driver-map"></div>
+            <p class="text-[10px] text-gray-300 px-2 py-2">🟢 You · 🔴 Destination</p>
+        </div>
+
+        <!-- ── Delivery Progress Steps ────────────────────────── -->
+        <div class="bg-white rounded-3xl p-5 card-shadow border border-gray-100 fade-in">
             <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
                 Delivery Progress
             </p>
             <ol class="relative border-l-2 border-green-200 ml-2 space-y-5 pb-1">
-
-                <li class="ml-5 step-done" id="step-assigned">
+                <li class="ml-5" id="step-assigned">
                     <span class="step-dot absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-gray-200"></span>
                     <p class="step-label text-sm text-gray-400">Assigned to you</p>
                     <p class="text-xs text-gray-400">Dispatcher has linked you to this order</p>
                 </li>
-
                 <li class="ml-5" id="step-started">
                     <span class="step-dot absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-gray-200"></span>
                     <p class="step-label text-sm text-gray-400">Delivery started</p>
                     <p class="text-xs text-gray-400">You tapped "Start Delivery" below</p>
                 </li>
-
                 <li class="ml-5" id="step-delivered">
                     <span class="step-dot absolute -left-[9px] w-4 h-4 rounded-full border-2 border-white bg-gray-200"></span>
                     <p class="step-label text-sm text-gray-400">Delivered</p>
@@ -145,7 +173,7 @@
             </ol>
         </div>
 
-        <!-- Action Buttons -->
+        <!-- ── Action Buttons ─────────────────────────────────── -->
         <div class="space-y-3" id="action-btns">
             <button id="btn-start"
                     onclick="startDelivery()"
@@ -166,53 +194,88 @@
             </div>
         </div>
 
-        <!-- No delivery state -->
+        <!-- ── No delivery state ──────────────────────────────── -->
         <div id="no-delivery"
-             class="hidden bg-white rounded-3xl p-8 card-shadow border border-gray-100 text-center">
+             class="hidden bg-white rounded-3xl p-8 card-shadow border border-gray-100 text-center fade-in">
             <div class="text-5xl mb-3">📦</div>
             <p class="font-bold text-gray-700 text-lg">No Delivery Assigned</p>
             <p class="text-sm text-gray-400 mt-1">
                 Your dispatcher hasn't assigned you to an order yet.<br>
-                This page will update automatically.
+                Check back in a moment.
             </p>
+            <button onclick="loadDelivery()"
+                    class="mt-4 px-5 py-2 bg-green-100 text-green-700 font-bold rounded-xl text-sm hover:bg-green-200 transition">
+                ↻ Refresh
+            </button>
         </div>
 
     </main>
 
     <script>
-    // ── State ──────────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    //  CONSTANTS
+    // ═══════════════════════════════════════════════════════════════
+    const API = 'https://icoms.onrender.com';
+
+    // ═══════════════════════════════════════════════════════════════
+    //  STATE
+    // ═══════════════════════════════════════════════════════════════
     const driver_id  = localStorage.getItem('userId');
     const driverName = localStorage.getItem('name') || 'Driver';
 
-    let delivery     = null;   // active delivery object from server
-    let gpsActive    = false;
-    let watchId      = null;
-    let gpsInterval  = null;
-    let lastCoords   = null;
+    let delivery      = null;   // active delivery from server
+    let gpsActive     = false;
+    let watchId       = null;
+    let lastCoords    = null;   // most recent GeolocationCoordinates
+    let destCoords    = null;   // { lat, lng } of client address (geocoded)
+    let initialDistKm = null;   // distance at start, for ETA bar progress
+
+    // Leaflet
+    let map           = null;
+    let driverMarker  = null;
+    let destMarker    = null;
+    let routeLine     = null;
 
     document.getElementById('driver-name-header').textContent = driverName;
 
-    // ── Load active delivery on page open ─────────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    //  1. LOAD ACTIVE DELIVERY
+    // ═══════════════════════════════════════════════════════════════
     async function loadDelivery() {
+        document.getElementById('delivery-card').innerHTML = `
+            <div class="flex gap-3 animate-pulse">
+                <div class="w-12 h-12 bg-gray-100 rounded-2xl flex-shrink-0"></div>
+                <div class="flex-1 space-y-2 pt-1">
+                    <div class="h-4 bg-gray-100 rounded w-3/4"></div>
+                    <div class="h-3 bg-gray-100 rounded w-1/2"></div>
+                </div>
+            </div>`;
         try {
-            const res  = await fetch(`http://localhost:3000/api/driver/${driver_id}/active-delivery`);
+            const res = await fetch(`${API}/api/driver/${driver_id}/active-delivery`);
             if (res.status === 404) { showNoDelivery(); return; }
+            if (!res.ok) { showNoDelivery(); return; }
             delivery = await res.json();
+            document.getElementById('no-delivery').classList.add('hidden');
             renderDeliveryCard();
-        } catch {
+            // Geocode client address for ETA
+            if (delivery.delivery_address) geocodeDestination(delivery.delivery_address);
+        } catch (err) {
+            console.error('loadDelivery error:', err);
             showNoDelivery();
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  2. RENDER DELIVERY CARD
+    // ═══════════════════════════════════════════════════════════════
     function renderDeliveryCard() {
         const status = delivery.order_status;
-
         document.getElementById('delivery-card').innerHTML = `
-            <div class="flex items-start gap-3">
+            <div class="flex items-start gap-3 fade-in">
                 <div class="bg-green-100 text-green-700 font-black text-lg w-12 h-12
                             rounded-2xl flex items-center justify-center flex-shrink-0">📦</div>
                 <div class="flex-1">
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
                         <p class="font-bold text-gray-800 text-lg">${delivery.order_code}</p>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold
                             ${status === 'In Transit'
@@ -221,8 +284,8 @@
                             ${status}
                         </span>
                     </div>
-                    <p class="text-sm text-gray-500 mt-0.5">
-                        ${delivery.client_org || delivery.client_name}
+                    <p class="text-sm text-gray-500 mt-0.5 font-semibold">
+                        ${delivery.client_org || delivery.client_name || '—'}
                     </p>
                     <p class="text-xs text-gray-400 mt-1">📍 ${delivery.delivery_address || 'Address not set'}</p>
                     <p class="text-xs text-gray-400 mt-0.5">
@@ -231,8 +294,7 @@
                             : 'Time not set'}
                     </p>
                 </div>
-            </div>
-        `;
+            </div>`;
 
         // Show correct action button
         if (status === 'Dispatched') {
@@ -242,7 +304,6 @@
             markStep('step-assigned', 'done');
             markStep('step-started',  'done');
             document.getElementById('btn-complete').classList.remove('hidden');
-            // Auto-enable GPS if in transit
             if (!gpsActive) activateGps();
         } else if (status === 'Delivered') {
             markStep('step-assigned',  'done');
@@ -257,7 +318,9 @@
         document.getElementById('no-delivery').classList.remove('hidden');
     }
 
-    // ── Step helper ────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    //  3. PROGRESS STEP HELPER
+    // ═══════════════════════════════════════════════════════════════
     function markStep(stepId, state) {
         const el  = document.getElementById(stepId);
         const dot = el.querySelector('.step-dot');
@@ -270,45 +333,139 @@
         }
     }
 
-    // ── Start delivery ─────────────────────────────────────────────
-    async function startDelivery() {
-        if (!delivery) return;
-        await fetch('http://localhost:3000/api/driver/start-delivery', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                delivery_id: delivery.delivery_id,
-                order_id:    delivery.order_id,
-                driver_id
-            })
-        });
-        delivery.order_status = 'In Transit';
-        document.getElementById('btn-start').classList.add('hidden');
-        document.getElementById('btn-complete').classList.remove('hidden');
-        markStep('step-started', 'done');
-        activateGps();
+    // ═══════════════════════════════════════════════════════════════
+    //  4. GEOCODE DESTINATION (OpenStreetMap Nominatim)
+    // ═══════════════════════════════════════════════════════════════
+    async function geocodeDestination(address) {
+        try {
+            const url  = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+            const res  = await fetch(url, { headers: { 'User-Agent': 'Kadambaas-ICOMS/1.0' } });
+            const data = await res.json();
+            if (data.length > 0) {
+                destCoords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                console.log('📍 Destination geocoded:', destCoords);
+                // If GPS already active, update ETA immediately
+                if (lastCoords) updateETA(lastCoords.latitude, lastCoords.longitude);
+            }
+        } catch (err) {
+            console.warn('Geocoding failed:', err.message);
+        }
     }
 
-    // ── Complete delivery ──────────────────────────────────────────
-    async function completeDelivery() {
-        if (!confirm('Mark this order as Delivered?')) return;
-        await fetch('http://localhost:3000/api/driver/complete-delivery', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                delivery_id: delivery.delivery_id,
-                order_id:    delivery.order_id,
-                driver_id
-            })
-        });
-        deactivateGps();
-        delivery.order_status = 'Delivered';
-        document.getElementById('btn-complete').classList.add('hidden');
-        document.getElementById('btn-done').classList.remove('hidden');
-        markStep('step-delivered', 'done');
+    // ═══════════════════════════════════════════════════════════════
+    //  5. HAVERSINE ETA CALCULATION
+    // ═══════════════════════════════════════════════════════════════
+    function haversineKm(lat1, lon1, lat2, lon2) {
+        const R    = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a    = Math.sin(dLat / 2) ** 2
+                   + Math.cos(lat1 * Math.PI / 180)
+                   * Math.cos(lat2 * Math.PI / 180)
+                   * Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
-    // ── GPS toggle ─────────────────────────────────────────────────
+    function updateETA(driverLat, driverLng) {
+        if (!destCoords) return;
+        const distKm  = haversineKm(driverLat, driverLng, destCoords.lat, destCoords.lng);
+        const avgKmh  = 30;  // city average speed
+        const etaMins = Math.ceil((distKm / avgKmh) * 60);
+        const etaTime = new Date(Date.now() + etaMins * 60000);
+
+        // Record initial distance for progress bar
+        if (!initialDistKm) initialDistKm = distKm;
+
+        // Update ETA card UI
+        document.getElementById('eta-card').classList.remove('hidden');
+        document.getElementById('eta-mins').textContent = etaMins;
+        document.getElementById('eta-unit').textContent = etaMins === 1 ? 'min' : 'min';
+        document.getElementById('eta-dist').textContent = `${distKm.toFixed(1)} km away`;
+        document.getElementById('eta-sub').textContent  =
+            `Arriving by approx. ${etaTime.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}`;
+
+        // Progress bar: how much of the original distance is covered
+        const pct = initialDistKm > 0
+            ? Math.min(100, Math.round(((initialDistKm - distKm) / initialDistKm) * 100))
+            : 0;
+        document.getElementById('eta-bar').style.width = pct + '%';
+
+        // Return ISO string for sending to server
+        return etaTime.toISOString();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  6. LEAFLET MAP INIT + UPDATE
+    // ═══════════════════════════════════════════════════════════════
+    const driverIcon = L.divIcon({
+        html: `<div style="background:linear-gradient(135deg,#15803d,#16a34a);width:40px;height:40px;border-radius:50%;border:3px solid white;box-shadow:0 4px 14px rgba(22,163,74,0.45);display:flex;align-items:center;justify-content:center;font-size:18px;">🚗</div>`,
+        iconSize: [40, 40], iconAnchor: [20, 20], className: ''
+    });
+    const destIcon = L.divIcon({
+        html: `<div style="background:linear-gradient(135deg,#E31E24,#FF5F1F);width:38px;height:38px;border-radius:50%;border:3px solid white;box-shadow:0 4px 14px rgba(227,30,36,0.4);display:flex;align-items:center;justify-content:center;font-size:18px;">📍</div>`,
+        iconSize: [38, 38], iconAnchor: [19, 38], className: ''
+    });
+
+    function initMap(lat, lng) {
+        if (map) return;
+        document.getElementById('map-card').classList.remove('hidden');
+        map = L.map('driver-map').setView([lat, lng], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+            maxZoom: 19
+        }).addTo(map);
+    }
+
+    function updateMap(lat, lng) {
+        if (!map) initMap(lat, lng);
+
+        // Animate driver marker
+        if (driverMarker) {
+            animateMarker(driverMarker, [lat, lng]);
+        } else {
+            driverMarker = L.marker([lat, lng], { icon: driverIcon })
+                .addTo(map)
+                .bindPopup(`<b>You</b><br>${driverName}`);
+        }
+
+        // Destination marker
+        if (destCoords && !destMarker) {
+            destMarker = L.marker([destCoords.lat, destCoords.lng], { icon: destIcon })
+                .addTo(map)
+                .bindPopup(`<b>Destination</b><br>${delivery.delivery_address || ''}`);
+        }
+
+        // Route line between driver and destination
+        if (destCoords) {
+            const coords = [[lat, lng], [destCoords.lat, destCoords.lng]];
+            if (routeLine) {
+                routeLine.setLatLngs(coords);
+            } else {
+                routeLine = L.polyline(coords, {
+                    color: '#16a34a', weight: 3, opacity: 0.7, dashArray: '8 5'
+                }).addTo(map);
+            }
+        }
+
+        map.panTo([lat, lng], { animate: true, duration: 1 });
+    }
+
+    function animateMarker(marker, newLatLng) {
+        const s     = marker.getLatLng();
+        const start = performance.now();
+        const dur   = 800;
+        function step(now) {
+            const t = Math.min((now - start) / dur, 1);
+            marker.setLatLng([s.lat + (newLatLng[0] - s.lat) * t,
+                              s.lng + (newLatLng[1] - s.lng) * t]);
+            if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  7. GPS — TOGGLE, ACTIVATE, DEACTIVATE
+    // ═══════════════════════════════════════════════════════════════
     function handleGpsToggle() {
         if (!delivery) {
             alert('No active delivery. GPS tracking is only available during a delivery.');
@@ -331,77 +488,166 @@
     function activateGps() {
         gpsActive = true;
         document.getElementById('gpsToggle').classList.add('on');
-        document.getElementById('gps-label').textContent = 'Broadcasting Live';
-        document.getElementById('gps-label').className =
-            'text-lg font-bold text-green-600 mt-0.5';
+        document.getElementById('gps-label').textContent  = 'Broadcasting Live';
+        document.getElementById('gps-label').className    = 'text-lg font-bold text-green-600 mt-0.5';
 
-        // Watch position continuously
+        // ── KEY FIX: watchPosition with HIGH ACCURACY ─────────────
+        // Push location on EVERY position update (not timer-based)
         watchId = navigator.geolocation.watchPosition(
-            pos => { lastCoords = pos.coords; },
-            err => console.warn('GPS error:', err.message),
-            { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
+            onPositionUpdate,           // called on every GPS fix
+            onPositionError,
+            {
+                enableHighAccuracy: true,  // ← high-accuracy mode
+                maximumAge:         0,     // ← never use cached position
+                timeout:            15000
+            }
         );
-
-        // Push every 60 seconds
-        pushLocation(); // immediate
-        gpsInterval = setInterval(pushLocation, 60000);
     }
 
     function deactivateGps() {
         gpsActive = false;
-        if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-        clearInterval(gpsInterval); gpsInterval = null;
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
         document.getElementById('gpsToggle').classList.remove('on');
         document.getElementById('gps-label').textContent = 'Inactive';
-        document.getElementById('gps-label').className = 'text-lg font-bold text-gray-600 mt-0.5';
+        document.getElementById('gps-label').className   = 'text-lg font-bold text-gray-600 mt-0.5';
         document.getElementById('signal-status').innerHTML = `
             <span class="w-2 h-2 rounded-full bg-gray-300"></span>
-            <span class="text-sm font-semibold text-gray-400">Standby</span>`;
+            <span class="text-xs font-semibold text-gray-400">Standby</span>`;
     }
 
-    // ── Push location to server ────────────────────────────────────
-    async function pushLocation() {
-        if (!delivery || !gpsActive) return;
+    // ═══════════════════════════════════════════════════════════════
+    //  8. ON EACH GPS FIX — push location + ETA to server
+    // ═══════════════════════════════════════════════════════════════
+    async function onPositionUpdate(position) {
+        if (!gpsActive || !delivery) return;
 
-        const getPos = () => new Promise((resolve, reject) =>
-            navigator.geolocation.getCurrentPosition(resolve, reject,
-                { enableHighAccuracy: true, timeout: 10000 })
-        );
+        const { latitude, longitude, accuracy } = position.coords;
+        lastCoords = position.coords;
 
+        // Update accuracy display
+        document.getElementById('gps-accuracy').textContent =
+            accuracy ? `±${Math.round(accuracy)}m` : '—';
+
+        // Calculate ETA
+        const etaISO = updateETA(latitude, longitude);
+
+        // Update map
+        updateMap(latitude, longitude);
+
+        // ── Push to /api/driver/update-location ───────────────────
         try {
-            const pos = lastCoords
-                ? { latitude: lastCoords.latitude, longitude: lastCoords.longitude }
-                : await getPos().then(p => p.coords);
-
-            await fetch('https://icoms.onrender.com/api/tracking/update', {
-                method: 'PUT',
+            await fetch(`${API}/api/driver/update-location`, {
+                method:  'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     delivery_id: delivery.delivery_id,
-                    latitude:    pos.latitude,
-                    longitude:   pos.longitude
+                    driver_id,
+                    latitude,
+                    longitude,
+                    eta: etaISO || null
                 })
             });
 
-            document.getElementById('last-sent').textContent =
-                new Date().toLocaleTimeString();
+            document.getElementById('last-sent').textContent = new Date().toLocaleTimeString();
             document.getElementById('signal-status').innerHTML = `
                 <span class="w-2 h-2 rounded-full bg-green-500 live-ring"></span>
-                <span class="text-sm font-semibold text-green-600">Live</span>`;
+                <span class="text-xs font-semibold text-green-600">Live</span>`;
 
         } catch (err) {
-            console.error('GPS push failed:', err);
+            console.error('Location push failed:', err);
             document.getElementById('signal-status').innerHTML = `
                 <span class="w-2 h-2 rounded-full bg-red-500"></span>
-                <span class="text-sm font-semibold text-red-500">Error</span>`;
+                <span class="text-xs font-semibold text-red-500">Error</span>`;
         }
     }
 
-    // ── Stop GPS if driver navigates away ─────────────────────────
-    window.addEventListener('beforeunload', () => { if (gpsActive) deactivateGps(); });
+    function onPositionError(err) {
+        console.warn('GPS error:', err.message);
+        document.getElementById('signal-status').innerHTML = `
+            <span class="w-2 h-2 rounded-full bg-red-500"></span>
+            <span class="text-xs font-semibold text-red-500">GPS Error</span>`;
+    }
 
-    // ── Init ──────────────────────────────────────────────────────
-    window.addEventListener('DOMContentLoaded', loadDelivery);
+    // ═══════════════════════════════════════════════════════════════
+    //  9. START / COMPLETE DELIVERY
+    // ═══════════════════════════════════════════════════════════════
+    async function startDelivery() {
+        if (!delivery) return;
+        const btn = document.getElementById('btn-start');
+        btn.disabled = true;
+        btn.textContent = 'Starting…';
+        try {
+            const res = await fetch(`${API}/api/driver/start-delivery`, {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    delivery_id: delivery.delivery_id,
+                    order_id:    delivery.order_id,
+                    driver_id
+                })
+            });
+            if (!res.ok) throw new Error('Server error');
+            delivery.order_status = 'In Transit';
+            document.getElementById('btn-start').classList.add('hidden');
+            document.getElementById('btn-complete').classList.remove('hidden');
+            markStep('step-started', 'done');
+            activateGps();
+        } catch (err) {
+            alert('Failed to start delivery: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '🚀 Start Delivery';
+        }
+    }
+
+    async function completeDelivery() {
+        if (!confirm('Mark this order as Delivered?')) return;
+        const btn = document.getElementById('btn-complete');
+        btn.disabled = true;
+        btn.textContent = 'Updating…';
+        try {
+            const res = await fetch(`${API}/api/driver/complete-delivery`, {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    delivery_id: delivery.delivery_id,
+                    order_id:    delivery.order_id,
+                    driver_id
+                })
+            });
+            if (!res.ok) throw new Error('Server error');
+            deactivateGps();
+            delivery.order_status = 'Delivered';
+            document.getElementById('btn-complete').classList.add('hidden');
+            document.getElementById('btn-done').classList.remove('hidden');
+            markStep('step-delivered', 'done');
+            document.getElementById('eta-card').classList.add('hidden');
+        } catch (err) {
+            alert('Failed to complete delivery: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '✅ Mark as Delivered';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  10. CLEANUP + INIT
+    // ═══════════════════════════════════════════════════════════════
+    window.addEventListener('beforeunload', () => {
+        if (gpsActive) deactivateGps();
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (!driver_id) {
+            alert('Session expired. Please log in again.');
+            window.location.href = 'index.html';
+            return;
+        }
+        loadDelivery();
+    });
     </script>
 </body>
 </html>

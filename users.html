@@ -96,7 +96,7 @@
             btn.textContent = 'Creating…';
 
             try {
-                const res  = await fetch('http://localhost:3000/api/users', {
+                const res  = await fetch('https://icoms.onrender.com/api/users', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body:    JSON.stringify({ name, email, role })
@@ -125,7 +125,7 @@
         async function deleteUser(userId, userName) {
             if (!confirm(`Delete user "${userName}"? This cannot be undone.`)) return;
             try {
-                const res = await fetch(`http://localhost:3000/api/users/${userId}`, { method: 'DELETE' });
+                const res = await fetch(`https://icoms.onrender.com/api/users/${userId}`, { method: 'DELETE' });
                 if (res.ok) {
                     fetchUsers();
                 } else {
@@ -139,7 +139,7 @@
         // ── Fetch and render all users ─────────────────────────────
         async function fetchUsers() {
             try {
-                const res   = await fetch('http://localhost:3000/api/users');
+                const res   = await fetch('https://icoms.onrender.com/api/users');
                 const users = await res.json();
                 const tbody = document.getElementById('userTableBody');
                 const count = document.getElementById('user-count');

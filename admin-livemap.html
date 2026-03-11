@@ -92,7 +92,7 @@
     // ── Load + render all active drivers ──────────────────────────
     async function refresh() {
         try {
-            const res     = await fetch('http://localhost:3000/api/admin/live-drivers');
+            const res     = await fetch('https://icoms.onrender.com/api/admin/live-drivers');
             const drivers = await res.json();
 
             document.getElementById('last-refresh').textContent =

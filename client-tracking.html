@@ -233,7 +233,7 @@
         const code = raw.startsWith('#') ? raw : '#' + raw;
         if (!raw) return showError('Please enter your order code.');
         try {
-            const res = await fetch(`http://localhost:3000/api/client/order/${encodeURIComponent(code)}`);
+            const res = await fetch(`https://icoms.onrender.com/api/client/order/${encodeURIComponent(code)}`);
             if (res.status === 404) return showError('Order not found. Please check your code.');
             startTracking(await res.json());
         } catch { showError('Could not connect to server.'); }
@@ -245,7 +245,7 @@
         const password = document.getElementById('login-password').value;
         if (!username || !password) return showError('Please enter your credentials.');
         try {
-            const res  = await fetch('http://localhost:3000/api/client/login-track', {
+            const res  = await fetch('https://icoms.onrender.com/api/client/login-track', {
                 method:'POST', headers:{'Content-Type':'application/json'},
                 body: JSON.stringify({ username, password })
             });
@@ -282,8 +282,8 @@
         if (!currentDeliveryId) return;
         try {
             const [latestRes, historyRes] = await Promise.all([
-                fetch(`http://localhost:3000/api/tracking/latest/${currentDeliveryId}`),
-                fetch(`http://localhost:3000/api/tracking/history/${currentDeliveryId}`)
+                fetch(`https://icoms.onrender.com/api/tracking/latest/${currentDeliveryId}`),
+                fetch(`https://icoms.onrender.com/api/tracking/history/${currentDeliveryId}`)
             ]);
             if (!latestRes.ok) { document.getElementById('eta-sub').textContent = 'Waiting for driver to start…'; return; }
 

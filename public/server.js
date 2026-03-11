@@ -14,13 +14,15 @@ app.use(cors({
 app.use(express.json());
 
 // ── Database Connection Pool ──────────────────────────────────────
-const db = mysql.createConnection({
-  host:     process.env.DB_HOST,
-  user:     process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port:     process.env.DB_PORT,
-  ssl:      { rejectUnauthorized: false }
+const db = mysql.createPool({
+  host:               process.env.DB_HOST,
+  user:               process.env.DB_USER,
+  password:           process.env.DB_PASSWORD,
+  database:           process.env.DB_NAME,
+  port:               process.env.DB_PORT,
+  waitForConnections: true,
+  connectionLimit:    10,
+  ssl:                { rejectUnauthorized: false }
 });
 
 db.getConnection((err, connection) => {
@@ -349,6 +351,29 @@ app.get('/api/notifications', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(r);
     });
+});
+
+// ── Driver location update with ETA ───────────────────────────────
+app.put('/api/driver/update-location', (req, res) => {
+    const { delivery_id, latitude, longitude, eta } = req.body;
+    if (!delivery_id || latitude == null || longitude == null) {
+        return res.status(400).json({ error: 'delivery_id, latitude, longitude are required' });
+    }
+    db.query(
+        'INSERT INTO tracking_logs (delivery_id, latitude, longitude) VALUES (?, ?, ?)',
+        [delivery_id, latitude, longitude],
+        (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (eta) {
+                db.query(
+                    'UPDATE deliveries SET actual_eta = ? WHERE delivery_id = ?',
+                    [new Date(eta), delivery_id],
+                    (err2) => { if (err2) console.warn('ETA update failed:', err2.message); }
+                );
+            }
+            res.json({ success: true });
+        }
+    );
 });
 
 // =================================================================
